@@ -31,6 +31,8 @@ const DEFAULT_STATE = {
   remainingSec: 0,
   mode: "idle",
   bridgeConnected: false,
+  /** close a tab as soon as it lands on the block page */
+  autoCloseBlocked: true,
 };
 
 let socket = null;
@@ -230,13 +232,46 @@ async function removeLocalDomain(raw) {
   return { ok: true };
 }
 
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   (async () => {
     if (message?.type === "ADD_DOMAIN") sendResponse(await addLocalDomain(message.domain));
     else if (message?.type === "REMOVE_DOMAIN") sendResponse(await removeLocalDomain(message.domain));
     else if (message?.type === "REFRESH") {
       await refresh();
       sendResponse({ ok: true });
+    } else if (message?.type === "CLOSE_TAB") {
+      // Works for tabs the *user* opened, which window.close() cannot touch.
+      const tabId = sender?.tab?.id;
+      if (typeof tabId === "number") {
+        await chrome.tabs.remove(tabId).catch(() => {});
+        sendResponse({ ok: true, closed: true });
+      } else {
+        sendResponse({ ok: false, error: "no tab to close" });
+      }
+    } else if (message?.type === "BLOCKED_PAGE_LOADED") {
+      // The page asks us what to do; honour the user's auto-close preference.
+      const state = await chrome.storage.local.get(DEFAULT_STATE);
+      const tab = sender?.tab;
+      const domain = normalizeDomain(message.domain || "");
+      let closed = false;
+      if (state.autoCloseBlocked && tab?.id != null) {
+        const siblings = tab.windowId != null ? await chrome.tabs.query({ windowId: tab.windowId }) : [];
+        // never close the last tab: that would shut the browser window down
+        if (siblings.length > 1) {
+          closed = await chrome.tabs.remove(tab.id).then(() => true).catch(() => false);
+        }
+      }
+      sendResponse({
+        ok: true,
+        closed,
+        autoClose: Boolean(state.autoCloseBlocked),
+        lastTab: !closed,
+        canUnblock: (state.localDomains || []).some((d) => normalizeDomain(d) === domain),
+        domain,
+      });
+    } else if (message?.type === "SET_AUTO_CLOSE") {
+      await chrome.storage.local.set({ autoCloseBlocked: Boolean(message.value) });
+      sendResponse({ ok: true, value: Boolean(message.value) });
     } else if (message?.type === "BLOCK_ACTIVE_TAB") {
       const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
       if (!tab?.url) {

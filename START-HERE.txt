@@ -15,7 +15,7 @@ WHAT'S INSIDE
   icons/                  PNG/ICO/ICNS icon set — PNGs must stay 8-bit RGBA
   regain-extension/       Chrome/Edge MV3 blocker extension
   server/room-server.mjs  study-room relay (port 8790)
-  tests/                  7 suites, 283 checks
+  tests/                  7 suites, 295 checks
   scripts/make-icns.mjs   rebuilds icons/icon.icns from the PNGs
 
 
@@ -36,7 +36,7 @@ RUN THE REAL DESKTOP APP (Tauri)
                                (output: src-tauri/target/release/bundle)
 
 CHECK THAT EVERYTHING WORKS
-       npm test                engine 103, extension 50, icons 32, relay 11,
+       npm test                engine 103, extension 62, icons 32, relay 11,
                                ui-render 30, ui-resilience 8, ui-flow 49
        npm run build           production web build into dist/
 
@@ -61,6 +61,13 @@ BLOCKING CHEAT SHEET
     shows how many times it has actually fired.
   - Blocking presets arm a whole category in one tap (chess & board games,
     streaming, social media, chat, shopping, adult).
+  - Land on a blocked site and the tab can close itself immediately
+    ("Close blocked tabs automatically", on by default — toggle it in the
+    extension popup or right on the block page). Turn it off and the page shows
+    a Close button that genuinely works, plus "Go back". Your last open tab is
+    never auto-closed.
+  - Blocked something by mistake? If you added the rule yourself in the popup,
+    the block page offers "Remove this site" and reopens it.
   - The chip at the top of Blocking tells you whether the extension is
     connected. If it says "not detected", load the extension (above) — the app
     on its own can only block desktop apps, not websites.

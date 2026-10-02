@@ -162,6 +162,24 @@ check("the badge counts the rules that are live right now", /setBadgeText/.test(
 check("the extension never ships page content anywhere", !/fetch\(|XMLHttpRequest/.test(read("background.js") + read("content.js") + read("popup.js")));
 check("manifest version reflects the blocking rewrite", /^1\.[2-9]\d*\.\d+$/.test(manifest.version), manifest.version);
 
+
+/* -------------------- blocked tabs can actually be closed ---------------- */
+
+const blockedJs = read("blocked.js");
+const blockedHtml = read("blocked.html");
+check("the block page has a real Close button, not a link to a missing file", /id="close-tab"/.test(blockedHtml) && /<button[^>]*id="close-tab"/.test(blockedHtml));
+check("no dead index.html link remains on the block page", !/href="index\.html"/.test(blockedHtml), "index.html does not exist in the extension");
+check("closing goes through the background worker, not window.close alone", /CLOSE_TAB/.test(blockedJs) && /chrome\.tabs\.remove/.test(background));
+check("window.close() and history.back() remain as fallbacks", /window\.close\(\)/.test(blockedJs) && /history\.back\(\)/.test(blockedJs));
+check("the user is told the shortcut when the browser refuses to close", /Ctrl\+W/.test(blockedJs));
+check("blocked tabs can auto-close on load", /BLOCKED_PAGE_LOADED/.test(blockedJs) && /autoCloseBlocked/.test(background));
+check("the last tab is never closed, which would kill the window", /siblings\.length > 1/.test(background) && /lastTab/.test(background));
+check("auto-close is a visible, user-controlled toggle", /id="auto-close"/.test(blockedHtml) && /id="auto-close"/.test(read("popup.html")));
+check("a local rule can be undone straight from the block page", /REMOVE_DOMAIN/.test(blockedJs) && /canUnblock/.test(blockedJs));
+check("app-pushed rules are not silently removable from the block page", /This rule comes from the Regain desktop app/.test(blockedJs));
+check("the block page offers Go back as an escape hatch", /id="go-back"/.test(blockedHtml) && /about:blank/.test(blockedJs));
+check("the block page reports the remaining session time", /left in this session/.test(blockedJs));
+
 console.log(`\nextension: ${passed} passed, ${failures.length} failed`);
 for (const f of failures) console.log(`  ✗ ${f}`);
 process.exit(failures.length ? 1 : 0);

@@ -17,7 +17,8 @@ browser‑preview mode so the whole product runs without a desktop build.
 | **Pomodoro** | Adjustable focus/short/long lengths, rounds before a long break, auto‑start breaks and focus, live phase ring |
 | **App Blocker** | 44 preloaded processes (Instagram, TikTok, Snapchat, Discord, Steam, **Chess.com, Lichess, RummyCircle, Dream11**, Roblox, Valorant, browsers…), custom additions, "in focus" vs "always" per rule, per-rule hit counter and a **Test** button that proves a rule fires |
 | **Website Blocker** | 60 domains incl. chess/board games, casual web games, streaming, chat and always-on adult sites; pasted links are normalised, subdomains match (`play.chess.com` ← `chess.com`), quick presets arm a whole category, and "Always" rules are enforced outside focus sessions too |
-| **Extension popup** | Block the site you are on in one click, keep your own always-blocked list that works with the desktop app closed, and see whether the app is connected |
+| **Extension popup** | Block the site you are on in one click, keep your own always-blocked list that works with the desktop app closed, see whether the app is connected, and choose whether blocked tabs close themselves |
+| **Leaving a blocked page** | The block page really closes the tab (`chrome.tabs.remove`, because `window.close()` is ignored for tabs you opened), offers Go back, tells you <kbd>Ctrl</kbd>+<kbd>W</kbd> if the browser refuses, and lets you undo a self-added rule on the spot. Auto-close never touches your last tab |
 | **Block Reels & Shorts** | Hides Instagram Reels, YouTube Shorts, Snapchat Spotlight and Facebook Reels; `/shorts/` URLs are intercepted and media paused |
 | **YouTube Study Mode** | Channel allow‑list; home feed, recommendations, comments and trending are removed while you focus |
 | **Screen Time Tracker** | Per‑app and per‑site usage, category donut, 14‑day focus chart, blocked‑attempt log, session history with ratings |
@@ -92,13 +93,13 @@ npm run icons           # regenerate icons/icon.icns from the PNG set
 ```
 
 `npm test` bundles the app with esbuild, starts a relay if one is not running,
-then runs **283 checks** across seven suites:
+then runs **295 checks** across seven suites:
 
 | Suite | Covers |
 | --- | --- |
 | `engine` (103) | formatting, analytics, streaks, 👍/👎 recommendations, drift helpers, state migration, pruning, plus domain/process matching: URL normalisation, subdomain rules, real-world process and window-title matching, preset bundles, catalogue integrity |
 | `icons` (32) | every bundled icon exists, is 8‑bit RGBA (Tauri rejects RGB at compile time), the ICO/ICNS containers parse, and the Tauri window/capability config is consistent |
-| `extension` (50) | manifest ↔ shipped files, `chrome.*` usage ↔ declared permissions, MV3 CSP compliance, and the blocking contract: anchored `||domain^` filters, case-insensitive matching, sub-frames covered, always-rules outranking focus-rules, popup one-click blocking, standalone `localDomains` |
+| `extension` (62) | manifest ↔ shipped files, `chrome.*` usage ↔ declared permissions, MV3 CSP compliance, and the blocking contract: anchored `||domain^` filters, case-insensitive matching, sub-frames covered, always-rules outranking focus-rules, popup one-click blocking, standalone `localDomains` |
 | `relay` (11) | raw RFC 6455 handshake, presence, progress fan‑out, chat, reactions, leave |
 | `ui-render` (30) | every one of the 12 routes renders with zero console errors, every control has an accessible name, Free/Pro gating works end to end |
 | `ui-resilience` (8) | **no relay running** → the app degrades to local mode instead of crashing |
@@ -216,7 +217,7 @@ macOS builds) was found and fixed.
 Verified in this workspace:
 
 * `npm run build` — TypeScript clean, 322 kB JS (98 kB gzip) plus 15 kB CSS.
-* `npm test` — engine 103, extension 50, icons 32, relay 11, ui‑render 30, ui‑resilience 8, ui‑flow 49 checks pass.
+* `npm test` — engine 103, extension 62, icons 32, relay 11, ui‑render 30, ui‑resilience 8, ui‑flow 49 checks pass.
 * Relay verified end‑to‑end with two independent clients (presence, progress,
   chat, reactions, leave).
 * Live Vite preview serves every route; the dev server binds `0.0.0.0` and

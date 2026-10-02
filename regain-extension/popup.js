@@ -118,5 +118,27 @@ $("domain").addEventListener("keydown", (event) => {
   if (event.key === "Enter") $("add").click();
 });
 
+const autoClose = document.getElementById("auto-close");
+if (autoClose) {
+  chrome.storage.local.get({ autoCloseBlocked: true }).then((s) => {
+    autoClose.checked = s.autoCloseBlocked !== false;
+    const hint = document.getElementById("auto-close-hint");
+    if (hint) {
+      hint.textContent = autoClose.checked
+        ? "On: a blocked site closes itself the moment it loads."
+        : "Off: the block page stays open with a Close button.";
+    }
+  });
+  autoClose.addEventListener("change", () => {
+    chrome.runtime.sendMessage({ type: "SET_AUTO_CLOSE", value: autoClose.checked });
+    const hint = document.getElementById("auto-close-hint");
+    if (hint) {
+      hint.textContent = autoClose.checked
+        ? "On: a blocked site closes itself the moment it loads."
+        : "Off: the block page stays open with a Close button.";
+    }
+  });
+}
+
 chrome.storage.onChanged.addListener(refresh);
 refresh();
