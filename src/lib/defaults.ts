@@ -1,3 +1,4 @@
+import type { SoundKind } from "./audio";
 import type {
   AppRule,
   FocusBlock,
@@ -9,7 +10,7 @@ import type {
 } from "./types";
 
 export const STORAGE_KEY = "regain.pc.state.v1";
-export const STATE_VERSION = 2;
+export const STATE_VERSION = 3;
 
 export const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 
@@ -39,6 +40,9 @@ export const DEFAULT_SETTINGS: Settings = {
   tickSound: false,
   musicVolume: 0.35,
   musicTrack: "rain",
+  /** extra layers mixed under the primary track (sound ids) */
+  musicLayers: [],
+  musicLayerVolume: 0.5,
   wallpaper: "aurora",
   roomServerUrl: "",
   nickname: "You",
@@ -70,30 +74,58 @@ const app = (
 ): AppRule => ({ id: `app-${process}`, process, name, icon, category, enabled, mode });
 
 export const APP_CATALOGUE: AppRule[] = [
+  /* social */
   app("instagram.exe", "Instagram", "📸", "social"),
   app("tiktok.exe", "TikTok", "🎵", "social"),
   app("snapchat.exe", "Snapchat", "👻", "social"),
   app("twitter.exe", "X / Twitter", "🐦", "social"),
   app("facebook.exe", "Facebook", "📘", "social"),
   app("reddit.exe", "Reddit", "👽", "social"),
+  /* chat */
   app("discord.exe", "Discord", "💬", "chat"),
   app("whatsapp.exe", "WhatsApp", "🟢", "chat"),
   app("telegram.exe", "Telegram", "✈️", "chat"),
-  app("Spotify.exe", "Spotify", "🎧", "video", false),
+  app("TelegramDesktop.exe", "Telegram Desktop", "✈️", "chat"),
+  app("Signal.exe", "Signal", "🔒", "chat", false),
+  /* chess, board & card games — the ones people actually lose evenings to */
+  app("Chess.exe", "Chess.com", "♟️", "games"),
+  app("chess.com.exe", "Chess.com (desktop app)", "♟️", "games"),
+  app("lichess.exe", "Lichess", "♞", "games"),
+  app("Chess24.exe", "Chess24", "♜", "games"),
+  app("RummyCircle.exe", "RummyCircle", "🃏", "games"),
+  app("Dream11.exe", "Dream11", "🏏", "games"),
+  app("MPL.exe", "MPL", "🎯", "games", false),
+  app("Solitaire.exe", "Solitaire", "🃏", "games", false),
+  app("Minesweeper.exe", "Minesweeper", "💥", "games", false),
+  /* video game clients */
   app("steam.exe", "Steam", "🎮", "games"),
   app("steamwebhelper.exe", "Steam Web Helper", "🎮", "games"),
   app("epicgameslauncher.exe", "Epic Games", "🕹️", "games"),
-  app("vlc.exe", "VLC", "🎬", "video", false),
+  app("LeagueClient.exe", "League of Legends", "⚔️", "games"),
+  app("VALORANT.exe", "Valorant", "🔫", "games"),
+  app("RobloxPlayerBeta.exe", "Roblox", "🧱", "games"),
+  app("MinecraftLauncher.exe", "Minecraft", "⛏️", "games"),
+  app("Freefire.exe", "Free Fire", "🔫", "games"),
+  app("GTA5.exe", "GTA V", "🚗", "games", false),
+  /* streaming & music */
   app("netflix.exe", "Netflix", "🍿", "video"),
   app("primevideo.exe", "Prime Video", "📺", "video"),
   app("Hotstar.exe", "Disney+ Hotstar", "🎥", "video"),
-  app("Freefire.exe", "Free Fire", "🔫", "games"),
-  app("GTA5.exe", "GTA V", "🚗", "games"),
-  app("MicrosoftEdge.exe", "Microsoft Edge", "🌊", "other", false, "focus"),
-  app("chrome.exe", "Google Chrome", "🌐", "other", false, "focus"),
-  app("msedge.exe", "MS Edge (legacy)", "🌐", "other", false, "focus"),
-  app("TelegramDesktop.exe", "Telegram Desktop", "✈️", "chat"),
-  app("qbittorrent.exe", "qBittorrent", "⬇️", "other"),
+  app("Twitch.exe", "Twitch", "🟣", "video"),
+  app("YouTube.exe", "YouTube (PWA / desktop)", "▶️", "video"),
+  app("Spotify.exe", "Spotify", "🎧", "video", false),
+  app("vlc.exe", "VLC", "🎬", "video", false),
+  /* browsers — off by default: blocking these blocks your study material too.
+     Block individual sites in the Website tab instead. */
+  app("chrome.exe", "Google Chrome", "🌐", "other", false),
+  app("msedge.exe", "Microsoft Edge", "🌊", "other", false),
+  app("MicrosoftEdge.exe", "Microsoft Edge (legacy)", "🌊", "other", false),
+  app("firefox.exe", "Firefox", "🦊", "other", false),
+  app("brave.exe", "Brave", "🦁", "other", false),
+  app("opera.exe", "Opera", "🎭", "other", false),
+  app("vivaldi.exe", "Vivaldi", "🎨", "other", false),
+  /* other */
+  app("qbittorrent.exe", "qBittorrent", "⬇️", "other", false),
 ];
 
 /* ------------------------------------------------------------------ */
@@ -110,6 +142,38 @@ const web = (
 ): WebRule => ({ id: `web-${domain}`, domain, label, icon, category, enabled, mode });
 
 export const WEB_CATALOGUE: WebRule[] = [
+  /* chess, board & card games — blocked by default, this is the usual culprit */
+  web("chess.com", "Chess.com", "♟️", "games"),
+  web("lichess.org", "Lichess", "♞", "games"),
+  web("chess24.com", "Chess24", "♜", "games"),
+  web("chesskid.com", "ChessKid", "♟️", "games", false),
+  web("rummycircle.com", "RummyCircle", "🃏", "games"),
+  web("add52.com", "Adda52 Rummy", "🃏", "games", false),
+  web("mpl.live", "MPL", "🎯", "games", false),
+  web("dream11.com", "Dream11", "🏏", "games", false),
+  web("play.chess.com", "Chess.com (play)", "♟️", "games", false),
+  /* casual web games */
+  web("friv.com", "Friv", "🎮", "games", false),
+  web("poki.com", "Poki", "🎮", "games", false),
+  web("y8.com", "Y8 Games", "🎮", "games", false),
+  web("crazygames.com", "CrazyGames", "🎮", "games", false),
+  web("miniclip.com", "Miniclip", "🎮", "games", false),
+  web("roblox.com", "Roblox", "🧱", "games"),
+  web("store.steampowered.com", "Steam Store", "🎮", "games"),
+  web("epicgames.com", "Epic Games Store", "🕹️", "games", false),
+  /* short-form & streaming video */
+  /* YouTube stays available by default so lectures keep working: the Shorts
+     shield and Study Mode tame it. Full blocking is one toggle away. */
+  web("youtube.com", "YouTube", "▶️", "video", false),
+  web("netflix.com", "Netflix", "🍿", "video"),
+  web("primevideo.com", "Prime Video", "📺", "video"),
+  web("hotstar.com", "Disney+ Hotstar", "🎥", "video"),
+  web("jiocinema.com", "JioCinema", "🎥", "video", false),
+  web("zee5.com", "ZEE5", "🎥", "video", false),
+  web("sonyliv.com", "SonyLIV", "🎥", "video", false),
+  web("twitch.tv", "Twitch", "🟣", "video"),
+  web("dailymotion.com", "Dailymotion", "📹", "video", false),
+  /* social */
   web("instagram.com", "Instagram", "📸", "social"),
   web("tiktok.com", "TikTok", "🎵", "social"),
   web("snapchat.com", "Snapchat", "👻", "social"),
@@ -117,22 +181,37 @@ export const WEB_CATALOGUE: WebRule[] = [
   web("x.com", "X (Twitter)", "🐦", "social"),
   web("twitter.com", "Twitter", "🐦", "social"),
   web("facebook.com", "Facebook", "📘", "social"),
-  web("pinterest.com", "Pinterest", "📌", "social"),
-  web("netflix.com", "Netflix", "🍿", "video"),
-  web("primevideo.com", "Prime Video", "📺", "video"),
-  web("hotstar.com", "Disney+ Hotstar", "🎥", "video"),
-  web("twitch.tv", "Twitch", "🟣", "video"),
-  web("9gag.com", "9GAG", "😂", "other"),
-  web("roblox.com", "Roblox", "🎮", "games"),
-  web("chess.com", "Chess.com", "♟️", "games"),
-  web("store.steampowered.com", "Steam Store", "🎮", "games"),
+  web("threads.net", "Threads", "🧵", "social", false),
+  web("pinterest.com", "Pinterest", "📌", "social", false),
+  web("quora.com", "Quora", "❓", "social", false),
+  web("linkedin.com", "LinkedIn", "💼", "social", false),
+  /* chat */
+  web("discord.com", "Discord", "💬", "chat"),
+  web("web.whatsapp.com", "WhatsApp Web", "🟢", "chat"),
+  web("telegram.org", "Telegram Web", "✈️", "chat", false),
+  /* shopping */
   web("amazon.in", "Amazon", "🛒", "shopping", false),
   web("flipkart.com", "Flipkart", "🛍️", "shopping", false),
+  web("myntra.com", "Myntra", "👕", "shopping", false),
+  web("ajio.com", "AJIO", "🛍️", "shopping", false),
+  web("meesho.com", "Meesho", "📦", "shopping", false),
+  web("nykaa.com", "Nykaa", "💄", "shopping", false),
+  web("aliexpress.com", "AliExpress", "📦", "shopping", false),
+  web("ebay.com", "eBay", "🛒", "shopping", false),
+  /* news & AI chat */
+  web("news.google.com", "Google News", "📰", "news", false),
+  web("timesofindia.com", "Times of India", "📰", "news", false),
+  web("ndtv.com", "NDTV", "📰", "news", false),
+  web("hindustantimes.com", "Hindustan Times", "📰", "news", false),
+  web("inshorts.com", "Inshorts", "📰", "news", false),
+  web("chatgpt.com", "ChatGPT", "🤖", "other", false),
+  web("gemini.google.com", "Gemini", "✨", "other", false),
+  /* adult — always blocked, never gated behind a session */
   web("pornhub.com", "Adult content", "🔞", "adult", true, "always"),
   web("xvideos.com", "Adult content", "🔞", "adult", true, "always"),
   web("xnxx.com", "Adult content", "🔞", "adult", true, "always"),
-  web("news.google.com", "Google News", "📰", "news", false),
-  web("timesofindia.com", "Times of India", "📰", "news", false),
+  web("xhamster.com", "Adult content", "🔞", "adult", true, "always"),
+  web("redtube.com", "Adult content", "🔞", "adult", true, "always"),
 ];
 
 /* ------------------------------------------------------------------ */
@@ -196,36 +275,67 @@ export const WALLPAPERS = [
 /* Focus sounds (all generated live with the Web Audio API)            */
 /* ------------------------------------------------------------------ */
 
+export type SoundCategory = "noise" | "nature" | "place" | "music" | "focus";
+
 export interface SoundDef {
   id: string;
   name: string;
   icon: string;
   blurb: string;
   pro: boolean;
-  kind:
-    | "white"
-    | "pink"
-    | "brown"
-    | "rain"
-    | "ocean"
-    | "fire"
-    | "forest"
-    | "cafe"
-    | "lofi"
-    | "deep";
+  category: SoundCategory;
+  /** synthesis voice used by the ambient engine */
+  kind: SoundKind;
 }
 
+export const SOUND_CATEGORY_LABELS: Record<SoundCategory, string> = {
+  noise: "Noise & masking",
+  nature: "Nature & weather",
+  place: "Places",
+  music: "Music",
+  focus: "Brainwave focus",
+};
+
 export const SOUNDS: SoundDef[] = [
-  { id: "rain", name: "Rainfall", icon: "🌧️", blurb: "Steady rain, proven to mask office noise", pro: false, kind: "rain" },
-  { id: "brown", name: "Brown noise", icon: "🟤", blurb: "Deep rumble that quiets a racing mind", pro: false, kind: "brown" },
-  { id: "white", name: "White noise", icon: "⚪", blurb: "Full-spectrum masking for library quiet", pro: false, kind: "white" },
-  { id: "pink", name: "Pink noise", icon: "🌸", blurb: "Softer masking, easier on the ears", pro: false, kind: "pink" },
-  { id: "ocean", name: "Ocean waves", icon: "🌊", blurb: "Slow swells for long study blocks", pro: true, kind: "ocean" },
-  { id: "fire", name: "Fireplace", icon: "🔥", blurb: "Crackling warmth for night sessions", pro: true, kind: "fire" },
-  { id: "forest", name: "Forest morning", icon: "🌲", blurb: "Birdsong and leaves, low arousal", pro: true, kind: "forest" },
-  { id: "cafe", name: "Café murmur", icon: "☕", blurb: "70 dB of background chatter", pro: true, kind: "cafe" },
-  { id: "lofi", name: "Lo-fi pads", icon: "🎧", blurb: "Endless generated chords, no lyrics", pro: true, kind: "lofi" },
-  { id: "deep", name: "Deep focus 40 Hz", icon: "🧠", blurb: "Gamma-tinged binaural drone", pro: true, kind: "deep" },
+  /* ---------------------------- masking ---------------------------- */
+  { id: "rain", name: "Rainfall", icon: "🌧️", blurb: "Steady rain, proven to mask office noise", pro: false, category: "nature", kind: "rain" },
+  { id: "brown", name: "Brown noise", icon: "🟤", blurb: "Deep rumble that quiets a racing mind", pro: false, category: "noise", kind: "brown" },
+  { id: "white", name: "White noise", icon: "⚪", blurb: "Full-spectrum masking for library quiet", pro: false, category: "noise", kind: "white" },
+  { id: "pink", name: "Pink noise", icon: "🌸", blurb: "Softer masking, easier on the ears", pro: false, category: "noise", kind: "pink" },
+
+  /* ----------------------------- nature ---------------------------- */
+  { id: "thunder", name: "Thunderstorm", icon: "🌩️", blurb: "Heavy rain with rolling thunder", pro: true, category: "nature", kind: "thunder" },
+  { id: "stream", name: "Forest stream", icon: "🏞️", blurb: "Water over stones, birds in the canopy", pro: true, category: "nature", kind: "stream" },
+  { id: "wind", name: "Windy hills", icon: "🍃", blurb: "Long gusts and grass, no melody", pro: false, category: "nature", kind: "wind" },
+  { id: "ocean", name: "Ocean waves", icon: "🌊", blurb: "Slow swells for long study blocks", pro: true, category: "nature", kind: "ocean" },
+  { id: "fire", name: "Fireplace", icon: "🔥", blurb: "Crackling warmth for night sessions", pro: true, category: "nature", kind: "fire" },
+  { id: "forest", name: "Forest morning", icon: "🌲", blurb: "Birdsong and leaves, low arousal", pro: true, category: "nature", kind: "forest" },
+  { id: "night", name: "Night crickets", icon: "🦗", blurb: "Crickets and a distant owl", pro: true, category: "nature", kind: "night" },
+  { id: "chimes", name: "Wind chimes", icon: "🎐", blurb: "Sparse metallic chimes in the breeze", pro: true, category: "nature", kind: "chimes" },
+
+  /* ----------------------------- places ---------------------------- */
+  { id: "cafe", name: "Café murmur", icon: "☕", blurb: "70 dB of background chatter", pro: true, category: "place", kind: "cafe" },
+  { id: "library", name: "Quiet library", icon: "📚", blurb: "Room hum, page turns, the odd cough", pro: false, category: "place", kind: "library" },
+  { id: "train", name: "Night train", icon: "🚆", blurb: "Rain on the window, rhythmic clatter", pro: true, category: "place", kind: "train" },
+  { id: "keyboard", name: "Library typing", icon: "⌨️", blurb: "A stranger's keyboard, studied ambience", pro: true, category: "place", kind: "keyboard" },
+  { id: "plane", name: "Cabin hum", icon: "✈️", blurb: "Cruise-altitude engine drone", pro: true, category: "place", kind: "plane" },
+
+  /* ----------------------------- music ----------------------------- */
+  { id: "lofi", name: "Lo-fi pads", icon: "🎧", blurb: "Endless generated chords, no lyrics", pro: true, category: "music", kind: "lofi" },
+  { id: "piano", name: "Lo-fi piano", icon: "🎹", blurb: "Soft keys over vinyl crackle", pro: true, category: "music", kind: "lofiPiano" },
+  { id: "jazz", name: "Lo-fi jazz", icon: "🎷", blurb: "Brush drums and a walking bass", pro: true, category: "music", kind: "lofiJazz" },
+  { id: "beats", name: "Lo-fi beats", icon: "🥁", blurb: "Boom-bap drums, 78 BPM, no vocals", pro: true, category: "music", kind: "lofiBeats" },
+  { id: "chill", name: "Chillwave", icon: "🌙", blurb: "Warm synth chords and slow arpeggios", pro: true, category: "music", kind: "chillwave" },
+  { id: "synthwave", name: "Synthwave", icon: "🏎️", blurb: "Retro arpeggiator, focus-tempo pulse", pro: true, category: "music", kind: "synthwave" },
+  { id: "ambient", name: "Ambient pads", icon: "🌌", blurb: "Slow, wide, almost still", pro: true, category: "music", kind: "ambient" },
+  { id: "bowls", name: "Singing bowls", icon: "🎼", blurb: "Tibetan bowl strikes with long decay", pro: false, category: "music", kind: "bowls" },
+  { id: "tanpura", name: "Tanpura drone", icon: "🪕", blurb: "Steady Sa–Pa drone for deep reading", pro: false, category: "music", kind: "tanpura" },
+  { id: "flute", name: "Bansuri flute", icon: "🪈", blurb: "Airy phrases in a pentatonic scale", pro: true, category: "music", kind: "flute" },
+
+  /* ---------------------------- brainwave -------------------------- */
+  { id: "deep", name: "Deep focus 40 Hz", icon: "🧠", blurb: "Gamma-tinged binaural drone", pro: true, category: "focus", kind: "deep" },
+  { id: "alpha", name: "Alpha 10 Hz", icon: "🌀", blurb: "Relaxed alertness, good for reading", pro: true, category: "focus", kind: "alpha" },
+  { id: "theta", name: "Theta 6 Hz", icon: "💤", blurb: "Wind-down drone for late revision", pro: true, category: "focus", kind: "theta" },
 ];
 
 /* ------------------------------------------------------------------ */

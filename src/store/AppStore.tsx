@@ -8,7 +8,18 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { todayKey, uid } from "../lib/defaults";
+import { SOUNDS, todayKey, uid } from "../lib/defaults";
+import { ambient, type SoundKind } from "../lib/audio";
+import {
+  domainMatches,
+  findMatchingRule,
+  guessCategory,
+  labelForDomain,
+  matchesProcessRule,
+  normalizeDomain,
+  normalizeProcess,
+  splitByMode,
+} from "../lib/blocking";
 import { clearState, loadState, saveState } from "../lib/persist";
 import {
   connectRoom,
@@ -118,7 +129,10 @@ interface StoreValue {
     toggleWebRule: (id: string) => void;
     setRuleMode: (id: string, kind: "app" | "web", mode: RuleMode) => void;
     addCustomApp: (process: string, label: string) => void;
-    addCustomWeb: (domain: string, label: string) => void;
+    addCustomWeb: (domain: string, label: string) => boolean;
+    setCategoryEnabled: (category: string, enabled: boolean, mode?: RuleMode) => void;
+    testBlock: (kind: "app" | "web", pattern: string) => void;
+    playSoundMix: (primary: string, layers: string[]) => void;
     removeCustomRule: (id: string) => void;
     toggleChannel: (id: string) => void;
     addChannel: (handle: string) => void;
@@ -210,19 +224,40 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     [todaySessions],
   );
 
-  const enabledProcesses = useMemo(
-    () =>
-      state.settings.appBlocker
-        ? state.appRules.filter((r) => r.enabled).map((r) => r.process.toLowerCase())
-        : [],
+  /** Enabled process rules, split into "only during focus" and "always". */
+  const processRules = useMemo(
+    () => (state.settings.appBlocker ? splitByMode(state.appRules) : { focus: [], always: [] }),
     [state.appRules, state.settings.appBlocker],
   );
-  const enabledDomains = useMemo(
-    () =>
-      state.settings.websiteBlocker
-        ? state.webRules.filter((r) => r.enabled).map((r) => r.domain.toLowerCase())
-        : [],
+  /** Enabled domain rules, split into "only during focus" and "always". */
+  const domainRules = useMemo(
+    () => (state.settings.websiteBlocker ? splitByMode(state.webRules) : { focus: [], always: [] }),
     [state.webRules, state.settings.websiteBlocker],
+  );
+
+  const enabledProcesses = useMemo(
+    () => [...processRules.focus, ...processRules.always].map((r) => r.process),
+    [processRules],
+  );
+  const alwaysProcesses = useMemo(() => processRules.always.map((r) => r.process), [processRules]);
+  const enabledDomains = useMemo(
+    () => [...domainRules.focus, ...domainRules.always].map((r) => r.domain),
+    [domainRules],
+  );
+  const alwaysDomains = useMemo(() => domainRules.always.map((r) => r.domain), [domainRules]);
+  const processPayload = useMemo(
+    () => [
+      ...processRules.focus.map((r) => ({ pattern: r.process, always: false })),
+      ...processRules.always.map((r) => ({ pattern: r.process, always: true })),
+    ],
+    [processRules],
+  );
+  const domainPayload = useMemo(
+    () => [
+      ...domainRules.focus.map((r) => ({ pattern: r.domain, always: false })),
+      ...domainRules.always.map((r) => ({ pattern: r.domain, always: true })),
+    ],
+    [domainRules],
   );
 
   // keep the tick's view of the blocklists current
@@ -620,12 +655,12 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   }, [isFocusActive, strictActive]);
 
   useEffect(() => {
-    void syncBlocklistToNative(enabledProcesses);
-  }, [enabledProcesses]);
+    void syncBlocklistToNative(processPayload);
+  }, [processPayload]);
 
   useEffect(() => {
-    void syncWebBlocklistToNative(enabledDomains);
-  }, [enabledDomains]);
+    void syncWebBlocklistToNative(domainPayload);
+  }, [domainPayload]);
 
   // reels / study-mode switches and the channel allow-list go to the extension
   const reelsBlocked = state.settings.blockReelsShorts;
@@ -644,7 +679,9 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const stop = startMonitor({
       blockedProcesses: enabledProcesses,
+      alwaysProcesses,
       blockedDomains: enabledDomains,
+      alwaysDomains,
       active: isFocusActive && state.settings.blockDuringFocus,
       onWindow: (info) => {
         lastWindowRef.current = info;
@@ -652,10 +689,13 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       },
       onBlocked: (info) => {
         const meta = info.domain ? webMetaFor(info.domain) : appMetaFor(info.process_name);
-        const allowed = info.domain
-          ? enabledDomains.includes(info.domain.toLowerCase())
-          : enabledProcesses.includes(info.process_name.toLowerCase());
-        if (!allowed) {
+        // A rule matches if it is armed for focus *or* permanently. Domain rules
+        // match subdomains too ("chess.com" catches "play.chess.com"), and app
+        // rules tolerate real-world process/title spellings.
+        const matched = info.domain
+          ? enabledDomains.some((d) => domainMatches(d, info.domain || ""))
+          : findMatchingRule(enabledProcesses, info.process_name, info.window_title) !== null;
+        if (!matched) {
           // still surface the event so the UI can nudge, but do not log it as a block
           setCurrentWindow(info);
           return;
@@ -664,7 +704,15 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       },
     });
     return stop;
-  }, [enabledProcesses, enabledDomains, isFocusActive, state.settings.blockDuringFocus, registerBlocked]);
+  }, [
+    enabledProcesses,
+    alwaysProcesses,
+    enabledDomains,
+    alwaysDomains,
+    isFocusActive,
+    state.settings.blockDuringFocus,
+    registerBlocked,
+  ]);
 
   useEffect(() => {
     if (!focusGuardEnabled) setGuard(null);
@@ -789,15 +837,16 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const addCustomApp = useCallback((process: string, label: string) => {
-    const clean = process.trim().toLowerCase();
+    const clean = normalizeProcess(process);
     if (!clean) return;
-    const withExe = clean.endsWith(".exe") ? clean : `${clean}.exe`;
     setState((prev) => {
-      if (prev.appRules.some((r) => r.process.toLowerCase() === withExe)) return prev;
+      if (prev.appRules.some((r) => normalizeProcess(r.process) === clean)) return prev;
       const rule: AppRule = {
         id: `app-custom-${uid()}`,
-        process: withExe,
-        name: label.trim() || withExe.replace(".exe", ""),
+        // store both spellings: the bare stem matches "Chess.exe", "chess",
+        // "chess.com.exe" and windows whose title mentions chess
+        process: `${process.trim() || clean}`,
+        name: label.trim() || clean,
         icon: "🧩",
         category: "other",
         enabled: true,
@@ -808,27 +857,82 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  const addCustomWeb = useCallback((domain: string, label: string) => {
-    const clean = domain
-      .trim()
-      .toLowerCase()
-      .replace(/^https?:\/\//, "")
-      .replace(/^www\./, "")
-      .replace(/\/.*$/, "");
-    if (!clean) return;
+  const addCustomWeb = useCallback((rawDomain: string, label: string) => {
+    const clean = normalizeDomain(rawDomain);
+    if (!clean) return false;
     setState((prev) => {
       if (prev.webRules.some((r) => r.domain === clean)) return prev;
+      const { icon, category } = guessCategory(clean);
       const rule: WebRule = {
         id: `web-custom-${uid()}`,
         domain: clean,
-        label: label.trim() || clean,
-        icon: "🔗",
-        category: "other",
+        label: label.trim() || labelForDomain(clean),
+        icon,
+        category,
         enabled: true,
         mode: "focus",
       };
       return { ...prev, webRules: [...prev.webRules, rule] };
     });
+    return true;
+  }, []);
+
+  /** Arms a whole category in one tap (used by the Blocking presets). */
+  const setCategoryEnabled = useCallback((category: string, enabled: boolean, mode?: RuleMode) => {
+    setState((prev) => ({
+      ...prev,
+      webRules: prev.webRules.map((r) =>
+        r.category === category ? { ...r, enabled, mode: mode ?? r.mode } : r,
+      ),
+    }));
+  }, []);
+
+  /**
+   * Instant proof that blocking is wired up: reports the given rule as blocked
+   * right now, exactly as the native watcher would. Used by the UI's Test button.
+   */
+  const testBlock = useCallback(
+    (kind: "app" | "web", pattern: string) => {
+      const s = stateRef.current;
+      if (kind === "web") {
+        const rule = s.webRules.find((r) => domainMatches(r.domain, pattern) || r.domain === pattern);
+        const domain = rule?.domain ?? normalizeDomain(pattern);
+        registerBlocked(
+          { process_name: "browser", window_title: `Test block — ${domain}`, pid: 0, domain },
+          "web",
+          rule
+            ? { label: rule.label, icon: rule.icon, category: rule.category }
+            : { label: labelForDomain(domain), icon: "🌐", category: "other" },
+        );
+        return;
+      }
+      const rule = s.appRules.find((r) => matchesProcessRule(r.process, pattern));
+      const process = rule?.process ?? pattern;
+      registerBlocked(
+        { process_name: process, window_title: rule ? `${rule.name} — test block` : "Test block", pid: 0 },
+        "app",
+        rule
+          ? { label: rule.name, icon: rule.icon, category: rule.category }
+          : { label: process, icon: "🧩", category: "other" },
+      );
+    },
+    [registerBlocked],
+  );
+
+  /** Sound layers for the mixer: the primary track plus any extras. */
+  const playSoundMix = useCallback((primary: string, layers: string[]) => {
+    const s = stateRef.current;
+    const toLayer = (id: string) => {
+      const def = SOUNDS.find((x) => x.id === id);
+      return def ? { kind: def.kind } : null;
+    };
+    const head = toLayer(primary);
+    if (!head) return;
+    const extras = layers
+      .filter((id) => id && id !== primary)
+      .map(toLayer)
+      .filter((x): x is { kind: SoundKind } => x !== null);
+    ambient.playMix([head, ...extras], s.settings.musicVolume);
   }, []);
 
   const removeCustomRule = useCallback((id: string) => {
@@ -1125,6 +1229,9 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       setRuleMode,
       addCustomApp,
       addCustomWeb,
+      setCategoryEnabled,
+      testBlock,
+      playSoundMix,
       removeCustomRule,
       toggleChannel,
       addChannel,

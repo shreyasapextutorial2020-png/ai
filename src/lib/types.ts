@@ -182,6 +182,9 @@ export interface Settings {
   tickSound: boolean;
   musicVolume: number;
   musicTrack: string;
+  /** additional sound ids layered under the primary track */
+  musicLayers: string[];
+  musicLayerVolume: number;
   wallpaper: string;
   roomServerUrl: string;
   nickname: string;

@@ -5,7 +5,7 @@
     <title>Regain</title>
     <style>
       body {
-        width: 250px;
+        width: 290px;
         margin: 0;
         padding: 16px;
         font-family: Inter, system-ui, sans-serif;
@@ -13,6 +13,7 @@
         color: #eceaff;
       }
       h1 { font-size: 15px; margin: 0 0 10px; }
+      h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; opacity: .55; margin: 16px 0 6px; }
       .state { font-size: 12.5px; opacity: .8; margin-bottom: 10px; }
       .pill {
         display: inline-block; padding: 3px 9px; border-radius: 999px;
@@ -20,19 +21,60 @@
       }
       .on { background: rgba(47,191,143,.18); color: #2fbf8f; }
       .off { background: rgba(251,113,133,.16); color: #fb7185; }
+      .idle { background: rgba(124,92,255,.18); color: #a99cff; }
       ul { padding-left: 16px; margin: 8px 0; font-size: 12px; opacity: .8; }
+      .row { display: flex; gap: 6px; }
+      input {
+        flex: 1; min-width: 0; padding: 7px 9px; border-radius: 9px; font-size: 12.5px;
+        border: 1px solid rgba(255,255,255,.14); background: rgba(255,255,255,.06); color: inherit;
+      }
+      input:focus { outline: 2px solid #7c5cff; outline-offset: 1px; }
+      button {
+        padding: 7px 11px; border-radius: 9px; font-size: 12.5px; font-weight: 600; cursor: pointer;
+        border: 1px solid rgba(255,255,255,.14); background: rgba(255,255,255,.07); color: inherit;
+      }
+      button.primary { background: linear-gradient(120deg, #7c5cff, #38bdf8); border-color: transparent; color: #fff; }
+      button:focus-visible { outline: 2px solid #7c5cff; outline-offset: 2px; }
+      .error { color: #fb7185; font-size: 12px; min-height: 15px; margin-top: 6px; }
+      .ok { color: #2fbf8f; font-size: 12px; min-height: 15px; margin-top: 6px; }
+      .list { display: grid; gap: 6px; margin-top: 8px; }
+      .item {
+        display: flex; align-items: center; gap: 8px; font-size: 12.5px;
+        background: rgba(255,255,255,.05); border-radius: 9px; padding: 6px 9px;
+      }
+      .item span { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+      .item button { padding: 3px 7px; font-size: 11px; }
+      .muted { opacity: .6; font-size: 11.5px; }
     </style>
   </head>
   <body>
     <h1>Regain Focus Companion</h1>
-    <div id="pill" class="pill off">checking…</div>
+    <div id="pill" class="pill idle">checking…</div>
     <div class="state" id="detail">Reading state from the desktop app…</div>
+    <div class="state" id="timer"></div>
+    <div class="state" id="bridge"></div>
+
+    <h2>Block the site you are on</h2>
+    <div class="row">
+      <button class="primary" id="block-tab" title="Block the domain of the active tab">🚫 Block this site</button>
+    </div>
+    <div class="ok" id="action-ok"></div>
+    <div class="error" id="action-error"></div>
+
+    <h2>Your always-blocked sites</h2>
+    <div class="row">
+      <input id="domain" placeholder="chess.com" aria-label="Domain to block" />
+      <button id="add" title="Add this domain to the always-blocked list">Add</button>
+    </div>
+    <div class="list" id="local-list"></div>
+    <div class="muted" id="local-empty">Nothing yet — these work even when the desktop app is closed.</div>
+
+    <h2>While focusing</h2>
     <ul>
-      <li>Reels &amp; Shorts blocked while focusing</li>
-      <li>Distracting domains redirected</li>
+      <li>Reels &amp; Shorts hidden</li>
+      <li>Desktop blocklist domains redirected</li>
       <li>YouTube Study Mode channel allow-list</li>
     </ul>
-    <div class="state" id="timer"></div>
     <script src="popup.js"></script>
   </body>
 </html>

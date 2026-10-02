@@ -32,10 +32,15 @@
       <div style="font-size: 56px">🛡️</div>
       <h1>Blocked by Regain</h1>
       <p>
-        <strong id="domain-name">This site</strong> is on your focus blocklist.
+        <strong id="domain-name">This site</strong> is on your Regain blocklist.
       </p>
-      <p class="hint">Blocked while a Regain focus session is running.</p>
-      <p><a href="index.html" id="close-tab">Close this tab</a></p>
+      <p class="hint" id="reason">Blocked while a Regain focus session is running.</p>
+      <p class="hint" id="timer"></p>
+      <p>
+        <a href="index.html" id="close-tab">Close this tab</a>
+        &nbsp;·&nbsp;
+        <a href="#" id="open-regain" title="Open the Regain desktop app">Back to studying</a>
+      </p>
     </div>
     <script src="blocked.js"></script>
   </body>

@@ -7,6 +7,8 @@
  * so every screen of the product stays fully explorable.
  */
 
+import { domainMatches, findMatchingRule } from "./blocking";
+
 export interface WindowInfo {
   process_name: string;
   window_title: string;
@@ -115,20 +117,28 @@ export async function requestNotificationPermission() {
 const SIM_APPS: Array<{ process_name: string; window_title: string; domain?: string }> = [
   { process_name: "chrome.exe", window_title: "Physics — Lecture 4 — YouTube", domain: "youtube.com" },
   { process_name: "chrome.exe", window_title: "Revision notes — Google Docs", domain: "docs.google.com" },
+  { process_name: "chrome.exe", window_title: "Chess.com — Play Chess Online", domain: "chess.com" },
   { process_name: "Code.exe", window_title: "main.rs — regain-core" },
   { process_name: "discord.exe", window_title: "#general — Discord" },
   { process_name: "chrome.exe", window_title: "Instagram • Reels", domain: "instagram.com" },
+  { process_name: "Chess.exe", window_title: "Chess.com — Play Chess" },
+  { process_name: "chrome.exe", window_title: "Friv — Free Online Games", domain: "friv.com" },
   { process_name: "tiktok.exe", window_title: "TikTok — For You" },
   { process_name: "chrome.exe", window_title: "Khan Academy — Limits", domain: "khanacademy.org" },
+  { process_name: "lichess.exe", window_title: "Lichess — Play" },
   { process_name: "steam.exe", window_title: "Steam — Library" },
-  { process_name: "WINWORD.EXE", window_title: "Chemistry notes.docx" },
   { process_name: "chrome.exe", window_title: "Reddit — r/GetStudying", domain: "reddit.com" },
+  { process_name: "WINWORD.EXE", window_title: "Chemistry notes.docx" },
 ];
 
 export interface MonitorOptions {
-  /** process names (lowercase) currently blocked */
+  /** process rules that only bite during a focus session */
   blockedProcesses: string[];
+  /** process rules that bite even outside a session ("Always") */
+  alwaysProcesses: string[];
   blockedDomains: string[];
+  /** domain rules that bite even outside a session ("Always") */
+  alwaysDomains: string[];
   active: boolean;
   onWindow: (info: WindowInfo) => void;
   onBlocked: (info: WindowInfo) => void;
@@ -152,9 +162,20 @@ export function startMonitor(opts: MonitorOptions): () => void {
       });
       cleanup = [un1, un2];
     } else {
-      // Browser simulator: rotate foreground apps, escalate to a blocked app
-      // every ~12s while focus is on so the blocker + analytics are visible.
+      // Browser simulator: rotates realistic foreground windows and escalates
+      // to an actual block when one of the user's rules matches — including
+      // "Always" rules while focus is off, so the whole pipeline is demoable
+      // and testable without Windows.
       let tick = 0;
+      const isBlockedNow = (info: { process_name: string; window_title: string; domain?: string }) =>
+        Boolean(info.domain)
+          ? [...opts.blockedDomains, ...opts.alwaysDomains].some((d) => domainMatches(d, info.domain || ""))
+          : findMatchingRule(
+              [...opts.blockedProcesses, ...opts.alwaysProcesses],
+              info.process_name,
+              info.window_title,
+            ) !== null;
+
       const timer = window.setInterval(() => {
         if (stopped) return;
         tick += 1;
@@ -165,27 +186,32 @@ export function startMonitor(opts: MonitorOptions): () => void {
           | undefined;
         const info = forced ?? SIM_APPS[tick % SIM_APPS.length];
         opts.onWindow({ ...info, pid: 1000 + (tick % 400) });
-        // a forced window still escalates to "blocked" so the guard is demoable
-        if (forced) {
-          const isBlockedNow =
-            opts.active &&
-            ((forced.domain ? opts.blockedDomains.includes(forced.domain.toLowerCase()) : false) ||
-              opts.blockedProcesses.includes(forced.process_name.toLowerCase()));
-          if (isBlockedNow) opts.onBlocked({ ...info, pid: 9000 + tick });
+
+        const alwaysBlocked = Boolean(info.domain)
+          ? opts.alwaysDomains.some((d) => domainMatches(d, info.domain || ""))
+          : findMatchingRule(opts.alwaysProcesses, info.process_name, info.window_title) !== null;
+
+        // Always rules fire regardless of the session; focus rules need one.
+        const blockedNow =
+          alwaysBlocked || (opts.active && isBlockedNow(info));
+
+        if (blockedNow) {
+          opts.onBlocked({ ...info, pid: 9000 + tick });
           return;
         }
 
-        const isDistraction = opts.active && (tick % 6 === 0);
-        if (isDistraction) {
-          const list = opts.blockedProcesses;
-          const distractor = list.length ? list[tick % list.length] : "tiktok.exe";
-          const payload: WindowInfo = {
-            process_name: distractor,
-            window_title: `${distractor.replace(".exe", "")} — distraction intercepted`,
-            pid: 9000 + tick,
-          };
-          opts.onWindow(payload);
-          opts.onBlocked(payload);
+        // Otherwise, once in a while, prove that an armed rule really does
+        // intercept by escalating a *matching* catalogue entry.
+        if (opts.active && tick % 5 === 0) {
+          const target = SIM_APPS.find((candidate) =>
+            candidate.domain
+              ? opts.blockedDomains.some((d) => domainMatches(d, candidate.domain || ""))
+              : findMatchingRule(opts.blockedProcesses, candidate.process_name, candidate.window_title) !== null,
+          );
+          if (target) {
+            opts.onWindow({ ...target, pid: 9000 + tick });
+            opts.onBlocked({ ...target, pid: 9000 + tick });
+          }
         }
       }, 4000);
       cleanup = [() => window.clearInterval(timer)];
@@ -205,12 +231,27 @@ export function startMonitor(opts: MonitorOptions): () => void {
   };
 }
 
-export async function syncBlocklistToNative(processes: string[]) {
-  await invokeSafe("update_blocklist", { list: processes });
+export interface RulePayload {
+  pattern: string;
+  always: boolean;
 }
 
-export async function syncWebBlocklistToNative(domains: string[]) {
-  await invokeSafe("update_web_blocklist", { list: domains });
+export async function syncBlocklistToNative(rules: RulePayload[]) {
+  await invokeSafe("update_blocklist", { rules });
+}
+
+export async function syncWebBlocklistToNative(rules: RulePayload[]) {
+  await invokeSafe("update_web_blocklist", { rules });
+}
+
+export interface BridgeStatus {
+  clients: number;
+  port: number;
+}
+
+/** How many extensions are connected to the desktop bridge (0 in a browser). */
+export async function getBridgeStatus(): Promise<BridgeStatus | null> {
+  return invokeSafe<BridgeStatus>("get_bridge_status");
 }
 
 export async function syncExtensionSettings(payload: {

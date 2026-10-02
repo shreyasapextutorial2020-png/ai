@@ -10,7 +10,6 @@
 pub mod monitor;
 
 use futures_util::{SinkExt, StreamExt};
-use std::collections::HashSet;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -25,20 +24,147 @@ use monitor::ActiveWindowInfo;
 /// Port the browser extension connects to.
 const BRIDGE_PORT: u16 = 48123;
 
+/// One blocklist entry. `always` rules bite outside focus sessions too.
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+struct BlockRule {
+    #[serde(alias = "domain", alias = "process")]
+    pattern: String,
+    #[serde(default)]
+    always: bool,
+}
+
+impl BlockRule {
+    fn new(pattern: impl Into<String>, always: bool) -> Self {
+        Self { pattern: pattern.into(), always }
+    }
+}
+
 #[derive(Default)]
 struct WebRules {
-    domains: HashSet<String>,
+    rules: Vec<BlockRule>,
     reels_blocked: bool,
     study_mode: bool,
     channels: Vec<String>,
 }
 
+impl WebRules {
+    /// Every pattern, with duplicates folded away (always wins over focus).
+    fn patterns(&self) -> Vec<BlockRule> {
+        let mut out: Vec<BlockRule> = Vec::new();
+        for rule in &self.rules {
+            match out.iter().position(|r| r.pattern == rule.pattern) {
+                Some(index) => out[index].always = out[index].always || rule.always,
+                None => out.push(rule.clone()),
+            }
+        }
+        out
+    }
+}
+
 struct AppState {
     is_blocking_active: AtomicBool,
     is_strict_mode: AtomicBool,
-    blocked_processes: Arc<Mutex<HashSet<String>>>,
+    blocked_processes: Arc<Mutex<Vec<BlockRule>>>,
     web_rules: Arc<Mutex<WebRules>>,
+    /// number of extensions currently attached to the bridge
+    bridge_clients: Arc<Mutex<u32>>,
     tx_channel: broadcast::Sender<String>,
+}
+
+/* ------------------------------------------------------------------ */
+/* rule matching (mirrors src/lib/blocking.ts)                         */
+/* ------------------------------------------------------------------ */
+
+/// "C:\\Program Files\\Chess.com\\Chess.exe" -> "chess"
+fn normalize_process(input: &str) -> String {
+    let lowered = input.trim().to_lowercase().replace('\\', "/");
+    let last = lowered.rsplit('/').next().unwrap_or(&lowered).to_string();
+    let stripped = last.strip_suffix(".exe").unwrap_or(&last).to_string();
+    stripped
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '+' | '-'))
+        .collect()
+}
+
+/// "https://www.Chess.com/play" -> "chess.com"
+fn normalize_domain(input: &str) -> String {
+    let mut value = input.trim().to_lowercase();
+    if let Some(idx) = value.find("://") {
+        value = value[idx + 3..].to_string();
+    }
+    value = value.split(['/', '?', '#']).next().unwrap_or("").to_string();
+    value = value.split(':').next().unwrap_or("").to_string();
+    value = value.trim_matches('.').to_string();
+    if let Some(rest) = value.strip_prefix("www.") {
+        value = rest.to_string();
+    }
+    for prefix in ["m.", "mobile.", "amp.", "music."] {
+        if let Some(rest) = value.strip_prefix(prefix) {
+            value = rest.to_string();
+        }
+    }
+    let looks_like_host = value.contains('.')
+        && value.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-'));
+    if looks_like_host {
+        value
+    } else {
+        String::new()
+    }
+}
+
+/// Rule matches the domain itself or any subdomain of it.
+fn domain_matches(rule: &str, host: &str) -> bool {
+    let r = normalize_domain(rule);
+    let h = normalize_domain(host);
+    if r.is_empty() || h.is_empty() {
+        return false;
+    }
+    h == r || h.ends_with(&format!(".{r}"))
+}
+
+/// Matches a rule against a real foreground window. Process names rarely equal
+/// what a user types, so the rule may also appear inside the process name or the
+/// window title ("chess.com" -> "Chess.com - Play Chess").
+fn process_matches(rule: &str, process_name: &str, window_title: &str) -> bool {
+    let rule_norm = normalize_process(rule);
+    let proc_norm = normalize_process(process_name);
+    if rule_norm.is_empty() || proc_norm.is_empty() {
+        return false;
+    }
+    if rule_norm == proc_norm {
+        return true;
+    }
+    if rule_norm.len() >= 3 && proc_norm.contains(&rule_norm) {
+        return true;
+    }
+    let stem = rule_norm.split('.').next().unwrap_or(&rule_norm);
+    if rule_norm.len() >= 4 && !stem.is_empty() && stem == proc_norm {
+        return true;
+    }
+    if rule_norm.len() >= 4 && !window_title.is_empty() {
+        let title = window_title.to_lowercase();
+        let plain = rule_norm.replace(['.', '_', '-'], " ");
+        if title.contains(&rule_norm) || title.contains(&plain) {
+            return true;
+        }
+        if stem.len() >= 5 && title.contains(stem) {
+            return true;
+        }
+    }
+    false
+}
+
+/// First matching rule wins. `active` = a focus session is running.
+fn find_blocking_rule(
+    rules: &[BlockRule],
+    process_name: &str,
+    window_title: &str,
+    active: bool,
+) -> Option<BlockRule> {
+    rules
+        .iter()
+        .find(|rule| (active || rule.always) && process_matches(&rule.pattern, process_name, window_title))
+        .cloned()
 }
 
 /* ------------------------------------------------------------------ */
@@ -87,7 +213,17 @@ fn broadcast_focus_state(state: &tauri::State<AppState>) {
         "domains": state
             .web_rules
             .lock()
-            .map(|w| w.domains.iter().cloned().collect::<Vec<String>>())
+            .map(|w| w.patterns().iter().map(|r| r.pattern.clone()).collect::<Vec<String>>())
+            .unwrap_or_default(),
+        "rules": state
+            .web_rules
+            .lock()
+            .map(|w| {
+                w.patterns()
+                    .iter()
+                    .map(|r| serde_json::json!({ "domain": r.pattern, "always": r.always }))
+                    .collect::<Vec<_>>()
+            })
             .unwrap_or_default(),
         "reelsBlocked": state.web_rules.lock().map(|w| w.reels_blocked).unwrap_or(false),
         "studyMode": state.web_rules.lock().map(|w| w.study_mode).unwrap_or(false),
@@ -102,37 +238,59 @@ fn broadcast_focus_state(state: &tauri::State<AppState>) {
 /* ------------------------------------------------------------------ */
 
 #[tauri::command]
-fn update_blocklist(state: tauri::State<AppState>, list: Vec<String>) {
+fn update_blocklist(state: tauri::State<AppState>, mut rules: Vec<BlockRule>) -> Vec<BlockRule> {
     if let Ok(mut blocklist) = state.blocked_processes.lock() {
-        blocklist.clear();
-        for item in list {
-            blocklist.insert(item.to_lowercase());
+        // Fold duplicates so the UI can send focus + always entries freely.
+        let mut merged: Vec<BlockRule> = Vec::new();
+        for rule in rules.drain(..) {
+            let pattern = rule.pattern.trim().to_string();
+            if pattern.is_empty() {
+                continue;
+            }
+            match merged.iter().position(|r| r.pattern.eq_ignore_ascii_case(&pattern)) {
+                Some(index) => merged[index].always = merged[index].always || rule.always,
+                None => merged.push(BlockRule { pattern, always: rule.always }),
+            }
+        }
+        *blocklist = merged.clone();
+        broadcast_focus_state(&state);
+        return merged;
+    }
+    Vec::new()
+}
+
+#[tauri::command]
+fn get_blocklist(state: tauri::State<AppState>) -> Vec<BlockRule> {
+    state.blocked_processes.lock().map(|b| b.clone()).unwrap_or_default()
+}
+
+#[tauri::command]
+fn update_web_blocklist(state: tauri::State<AppState>, mut rules: Vec<BlockRule>) -> Vec<BlockRule> {
+    let mut cleaned: Vec<BlockRule> = Vec::new();
+    for rule in rules.drain(..) {
+        let domain = normalize_domain(&rule.pattern);
+        if domain.is_empty() {
+            continue;
+        }
+        match cleaned.iter().position(|r| r.pattern == domain) {
+            Some(index) => cleaned[index].always = cleaned[index].always || rule.always,
+            None => cleaned.push(BlockRule { pattern: domain, always: rule.always }),
         }
     }
-    broadcast_focus_state(&state);
-}
-
-#[tauri::command]
-fn get_blocklist(state: tauri::State<AppState>) -> Vec<String> {
-    state
-        .blocked_processes
-        .lock()
-        .map(|b| b.iter().cloned().collect())
-        .unwrap_or_default()
-}
-
-#[tauri::command]
-fn update_web_blocklist(state: tauri::State<AppState>, list: Vec<String>) -> Vec<String> {
-    let cleaned: Vec<String> = list
-        .into_iter()
-        .map(|d| d.trim().to_lowercase().replace("www.", ""))
-        .filter(|d| !d.is_empty())
-        .collect();
-    if let Ok(mut rules) = state.web_rules.lock() {
-        rules.domains = cleaned.iter().cloned().collect();
+    if let Ok(mut web) = state.web_rules.lock() {
+        web.rules = cleaned.clone();
     }
     broadcast_focus_state(&state);
     cleaned
+}
+
+/// Connection count for the "is my extension talking to the app?" chip.
+#[tauri::command]
+fn get_bridge_status(state: tauri::State<AppState>) -> serde_json::Value {
+    serde_json::json!({
+        "clients": state.bridge_clients.lock().map(|c| *c).unwrap_or(0),
+        "port": BRIDGE_PORT,
+    })
 }
 
 #[tauri::command]
@@ -196,16 +354,21 @@ fn notify(app: tauri::AppHandle, title: String, body: String) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let mut default_blocked = HashSet::new();
-    for process in [
+    // Mirrors APP_CATALOGUE in src/lib/defaults.ts: the UI replaces this list
+    // as soon as it loads, this is only the cold-start default.
+    let default_blocked: Vec<BlockRule> = [
         "discord.exe",
         "steam.exe",
         "tiktok.exe",
         "instagram.exe",
         "snapchat.exe",
-    ] {
-        default_blocked.insert(process.to_string());
-    }
+        "Chess.exe",
+        "chess.com.exe",
+        "lichess.exe",
+    ]
+    .iter()
+    .map(|p| BlockRule::new(*p, false))
+    .collect();
 
     let (tx, _rx) = broadcast::channel::<String>(64);
 
@@ -213,6 +376,7 @@ pub fn run() {
         is_blocking_active: AtomicBool::new(false),
         is_strict_mode: AtomicBool::new(false),
         blocked_processes: Arc::new(Mutex::new(default_blocked)),
+        bridge_clients: Arc::new(Mutex::new(0)),
         web_rules: Arc::new(Mutex::new(WebRules::default())),
         tx_channel: tx.clone(),
     };
@@ -228,6 +392,7 @@ pub fn run() {
             update_blocklist,
             get_blocklist,
             update_web_blocklist,
+            get_bridge_status,
             update_extension_settings,
             get_active_window,
             minimize_active_window,
@@ -264,6 +429,10 @@ pub fn run() {
                         while let Ok((stream, _)) = listener.accept().await {
                             let mut rx_sub = tx_server.subscribe();
                             let client = bridge_handle.clone();
+                            if let Ok(mut count) = client.state::<AppState>().bridge_clients.lock() {
+                                *count += 1;
+                                let _ = client.emit("bridge-clients", *count);
+                            }
 
                             tauri::async_runtime::spawn(async move {
                                 if let Ok(ws_stream) = accept_async(stream).await {
@@ -277,7 +446,8 @@ pub fn run() {
                                             "type": "FOCUS_MODE_STATE",
                                             "active": state.is_blocking_active.load(Ordering::SeqCst),
                                             "strict": state.is_strict_mode.load(Ordering::SeqCst),
-                                            "domains": web.as_ref().map(|w| w.domains.iter().cloned().collect::<Vec<String>>()).unwrap_or_default(),
+                                            "domains": web.as_ref().map(|w| w.patterns().iter().map(|r| r.pattern.clone()).collect::<Vec<String>>()).unwrap_or_default(),
+                                            "rules": web.as_ref().map(|w| w.patterns().iter().map(|r| serde_json::json!({ "domain": r.pattern, "always": r.always })).collect::<Vec<_>>()).unwrap_or_default(),
                                             "reelsBlocked": web.as_ref().map(|w| w.reels_blocked).unwrap_or(false),
                                             "studyMode": web.as_ref().map(|w| w.study_mode).unwrap_or(false),
                                             "channels": web.as_ref().map(|w| w.channels.clone()).unwrap_or_default(),
@@ -316,6 +486,11 @@ pub fn run() {
                                         }
                                     }
                                     reader.abort();
+                                    let state = client.state::<AppState>();
+                                    if let Ok(mut count) = state.bridge_clients.lock() {
+                                        *count = count.saturating_sub(1);
+                                        let _ = client.emit("bridge-clients", *count);
+                                    }
                                 }
                             });
                         }
@@ -339,18 +514,26 @@ pub fn run() {
                     if let Some(info) = monitor::get_active_window() {
                         let _ = app_handle.emit("window-focus-changed", &info);
 
-                        if !is_active {
-                            continue;
-                        }
+                        // focus-only rules need a session; always-rules do not
 
-                        let blocked = blocked_ref
-                            .lock()
-                            .map(|list| list.contains(&info.process_name.to_lowercase()))
-                            .unwrap_or(false);
+                        // Fuzzy match on process name *and* window title, so a
+                        // rule like "chess.com" also catches "Chess.exe" and
+                        // "Chess.com - Play Chess". "Always" rules apply even
+                        // when no session is running.
+                        let rules = blocked_ref.lock().map(|list| list.clone()).unwrap_or_default();
+                        let matched = find_blocking_rule(&rules, &info.process_name, &info.window_title, is_active);
 
-                        if blocked {
+                        if let Some(rule) = matched {
                             monitor::minimize_active_window();
-                            let _ = app_handle.emit("distraction-blocked", &info);
+                            let payload = serde_json::json!({
+                                "process_name": info.process_name,
+                                "window_title": info.window_title,
+                                "pid": info.pid,
+                                "domain": info.domain,
+                                "rule": rule.pattern,
+                                "always": rule.always,
+                            });
+                            let _ = app_handle.emit("distraction-blocked", payload);
                             if let Some(win) = app_handle.get_webview_window("blocker") {
                                 let _ = win.show();
                             }
