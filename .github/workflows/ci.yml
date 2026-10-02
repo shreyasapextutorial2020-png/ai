@@ -10,6 +10,12 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# contents: write lets the rust job attach its compile log as a commit comment,
+# statuses: write lets it publish a one-line failure status.
+permissions:
+  contents: write
+  statuses: write
+
 jobs:
   web:
     name: Web app, engine & tests
