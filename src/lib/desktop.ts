@@ -158,8 +158,22 @@ export function startMonitor(opts: MonitorOptions): () => void {
       const timer = window.setInterval(() => {
         if (stopped) return;
         tick += 1;
-        const info = SIM_APPS[tick % SIM_APPS.length];
+        // Demo/dev hook: assign window.__REGAIN_SIM_WINDOW__ to force which app
+        // the simulated monitor reports (used by the demo tour and the tests).
+        const forced = (window as unknown as Record<string, unknown>).__REGAIN_SIM_WINDOW__ as
+          | { process_name: string; window_title: string; domain?: string }
+          | undefined;
+        const info = forced ?? SIM_APPS[tick % SIM_APPS.length];
         opts.onWindow({ ...info, pid: 1000 + (tick % 400) });
+        // a forced window still escalates to "blocked" so the guard is demoable
+        if (forced) {
+          const isBlockedNow =
+            opts.active &&
+            ((forced.domain ? opts.blockedDomains.includes(forced.domain.toLowerCase()) : false) ||
+              opts.blockedProcesses.includes(forced.process_name.toLowerCase()));
+          if (isBlockedNow) opts.onBlocked({ ...info, pid: 9000 + tick });
+          return;
+        }
 
         const isDistraction = opts.active && (tick % 6 === 0);
         if (isDistraction) {

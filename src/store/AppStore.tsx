@@ -8,16 +8,8 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import {
-  DEFAULT_POMODORO,
-  DEFAULT_SETTINGS,
-  STORAGE_KEY,
-  STATE_VERSION,
-  initialState,
-  todayKey,
-  uid,
-} from "../lib/defaults";
-import { seedDemoState } from "../lib/demo";
+import { todayKey, uid } from "../lib/defaults";
+import { clearState, loadState, saveState } from "../lib/persist";
 import {
   connectRoom,
   makeBuddies,
@@ -40,7 +32,14 @@ import {
   syncWebBlocklistToNative,
   type WindowInfo,
 } from "../lib/desktop";
-import { clamp, computeStreak } from "../lib/utils";
+import {
+  clamp,
+  clockToMinutes,
+  computeStreak,
+  driftNudgeText,
+  driftThresholdSec,
+  isDistractingCategory,
+} from "../lib/utils";
 import type {
   ActiveSession,
   AppRule,
@@ -61,35 +60,12 @@ import type {
 /* persistence                                                         */
 /* ------------------------------------------------------------------ */
 
-function loadState(): PersistedState {
-  const bridgeMode: PersistedState["bridgeMode"] = isTauri() ? "tauri" : "browser";
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw) as PersistedState;
-      if (parsed && parsed.version === STATE_VERSION) {
-        return {
-          ...initialState(bridgeMode),
-          ...parsed,
-          settings: { ...DEFAULT_SETTINGS, ...parsed.settings },
-          pomodoro: { ...DEFAULT_POMODORO, ...parsed.pomodoro },
-          bridgeMode,
-          active: parsed.active ?? null,
-        };
-      }
-    }
-  } catch {
-    /* corrupted storage — start fresh */
-  }
-  const fresh = initialState(bridgeMode);
-  return bridgeMode === "browser" ? seedDemoState(fresh) : fresh;
+function initialBridgeMode(): PersistedState["bridgeMode"] {
+  return isTauri() ? "tauri" : "browser";
 }
 
-function trimUsage(usage: UsageSlice[]) {
-  const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - 60);
-  const cut = todayKey(cutoff);
-  return usage.filter((u) => u.date >= cut);
+function bootstrapState(): PersistedState {
+  return loadState(initialBridgeMode());
 }
 
 /* ------------------------------------------------------------------ */
@@ -176,7 +152,7 @@ export function useStore(): StoreValue {
 /* ------------------------------------------------------------------ */
 
 export function AppStoreProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<PersistedState>(loadState);
+  const [state, setState] = useState<PersistedState>(bootstrapState);
   const [now, setNow] = useState(() => Date.now());
   const [currentWindow, setCurrentWindow] = useState<WindowInfo | null>(null);
   const [guard, setGuard] = useState<GuardPayload | null>(null);
@@ -188,6 +164,13 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   const lastWindowRef = useRef<WindowInfo | null>(null);
   const usageTickRef = useRef<{ at: number } | null>(null);
   const lastCompleteRef = useRef(0);
+  /** drift tracking: which distracting window is foreground and for how long */
+  const driftRef = useRef<{ key: string; since: number; nudgedAt: number } | null>(null);
+  /** scheduled focus blocks already reminded about in this run (blockId@date) */
+  const firedBlockRef = useRef<Set<string>>(new Set());
+  /** mirror of the enabled rule lists so the 1 Hz tick reads fresh values */
+  const enabledProcessesRef = useRef<string[]>([]);
+  const enabledDomainsRef = useRef<string[]>([]);
   const goalHitRef = useRef<string | null>(null);
   const roomRef = useRef<RoomTransport | null>(null);
   const roomTickRef = useRef(0);
@@ -195,19 +178,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   /* ----------------------------- persist ---------------------------- */
 
   useEffect(() => {
-    const id = window.setTimeout(() => {
-      try {
-        const payload: PersistedState = {
-          ...state,
-          usage: trimUsage(state.usage),
-          blockedLog: state.blockedLog.slice(-200),
-          sessions: state.sessions.slice(-400),
-        };
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
-      } catch (err) {
-        console.warn("[regain] could not persist state", err);
-      }
-    }, 350);
+    const id = window.setTimeout(() => saveState(state), 350);
     return () => window.clearTimeout(id);
   }, [state]);
 
@@ -254,6 +225,12 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     [state.webRules, state.settings.websiteBlocker],
   );
 
+  // keep the tick's view of the blocklists current
+  useEffect(() => {
+    enabledProcessesRef.current = enabledProcesses;
+    enabledDomainsRef.current = enabledDomains;
+  }, [enabledProcesses, enabledDomains]);
+
   /* ----------------------------- helpers ---------------------------- */
 
   const accrueUsage = useCallback(
@@ -277,6 +254,21 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
             : [...prev.usage, { date, key, label, icon, kind, category, seconds }];
         return { ...prev, usage };
       });
+    },
+    [],
+  );
+
+  /** Adds a nudge to state; the shell turns these into toasts + notifications. */
+  const pushReminder = useCallback(
+    (kind: PersistedState["reminders"][number]["kind"], title: string, body: string, ref?: string) => {
+      setState((prev) => ({
+        ...prev,
+        reminders: [
+          ...prev.reminders,
+          { id: uid(), kind, title, body, at: Date.now(), ref },
+        ].slice(-20),
+      }));
+      if (stateRef.current.settings.notifications) void notify(title, body);
     },
     [],
   );
@@ -531,7 +523,76 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         });
       }
 
-      // 4. cross the daily goal → nudge once per day
+      // 4. Focus Guard reminders — "you drifted" nudge while a session runs
+      {
+        const s = stateRef.current;
+        const canNudge = s.settings.focusGuardReminders && s.settings.pro;
+        if (canNudge && s.active?.running) {
+          const win = lastWindowRef.current;
+          const meta = win
+            ? win.domain
+              ? webMetaFor(win.domain)
+              : appMetaFor(win.process_name)
+            : null;
+          const label = win?.domain || win?.process_name || "";
+          const isBlocked = win
+            ? win.domain
+              ? enabledDomainsRef.current.includes(win.domain.toLowerCase())
+              : enabledProcessesRef.current.includes(win.process_name.toLowerCase())
+            : false;
+
+          if (win && meta && isDistractingCategory(meta.category) && !isBlocked) {
+            const now2 = Date.now();
+            const current = driftRef.current;
+            const sameWindow = current && current.key === label;
+            const since = sameWindow ? current!.since : now2;
+            const nudgedAt = sameWindow ? current!.nudgedAt : 0;
+            const threshold = driftThresholdSec(s.settings.focusGuardMinutes) * 1000;
+            if (now2 - since >= threshold && now2 - nudgedAt >= threshold) {
+              const text = driftNudgeText(meta.label, (now2 - since) / 60000);
+              pushReminder("drift", text.title, text.body, label);
+              driftRef.current = { key: label, since, nudgedAt: now2 };
+            } else {
+              driftRef.current = { key: label, since, nudgedAt };
+            }
+          } else {
+            driftRef.current = null;
+          }
+        } else {
+          driftRef.current = null;
+        }
+      }
+
+      // 5. planner reminders — a scheduled block is starting now
+      {
+        const s = stateRef.current;
+        if (s.settings.notifications) {
+          const nowDate = new Date();
+          const dateKey = todayKey(nowDate);
+          const dayIdx = nowDate.getDay();
+          const minutesNow = nowDate.getHours() * 60 + nowDate.getMinutes();
+          for (const block of s.blocks) {
+            if (block.day !== dayIdx || !block.reminder) continue;
+            const start = clockToMinutes(block.start);
+            const key = `${block.id}@${dateKey}`;
+            if (firedBlockRef.current.has(key)) continue;
+            if (minutesNow >= start && minutesNow - start <= 2 && !s.active) {
+              firedBlockRef.current.add(key);
+              pushReminder(
+                "planner",
+                `🗓️ ${block.label} starts now`,
+                `${block.subject} · ${block.start}–${block.end}. Ready to start the session?`,
+                block.id,
+              );
+            } else if (minutesNow > start + 2) {
+              // missed windows must not fire later in the day
+              firedBlockRef.current.add(key);
+            }
+          }
+        }
+      }
+
+      // 6. cross the daily goal → nudge once per day
       if (s.settings.notifications) {
         const mins = todayFocusedMinutes(s);
         const key = todayKey();
@@ -542,7 +603,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       }
     }, 1000);
     return () => window.clearInterval(id);
-  }, [accrueUsage]);
+  }, [accrueUsage, pushReminder]);
 
   // session completion watch
   useEffect(() => {
@@ -1022,9 +1083,9 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const resetAllData = useCallback(() => {
-    localStorage.removeItem(STORAGE_KEY);
-    const fresh = initialState(isTauri() ? "tauri" : "browser");
-    setState(isTauri() ? fresh : seedDemoState(fresh));
+    clearState();
+    // loadState() re-bootstraps defaults (and sample history in the browser preview)
+    setState(loadState(initialBridgeMode()));
     setGuard(null);
     roomRef.current?.close();
     roomRef.current = null;

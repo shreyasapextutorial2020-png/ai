@@ -104,6 +104,9 @@ export function Shell({
           <div className="tiny">
             {goalPct}% of {fmtShort(state.settings.dailyGoalMinutes * 60)} goal · 🔥 {state.streak.current}d streak
           </div>
+          <div className="tiny muted" style={{ marginTop: 8 }}>
+            Space pause · M music · ? shortcuts
+          </div>
         </div>
       </aside>
 

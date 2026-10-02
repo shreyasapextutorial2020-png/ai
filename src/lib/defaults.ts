@@ -9,7 +9,7 @@ import type {
 } from "./types";
 
 export const STORAGE_KEY = "regain.pc.state.v1";
-export const STATE_VERSION = 1;
+export const STATE_VERSION = 2;
 
 export const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 
@@ -32,6 +32,7 @@ export const DEFAULT_SETTINGS: Settings = {
   appBlocker: true,
   notifications: true,
   focusGuard: false,
+  focusGuardReminders: true,
   focusGuardMinutes: 15,
   startAtLogin: false,
   minimiseToTray: true,
@@ -256,6 +257,7 @@ export function initialState(bridgeMode: "tauri" | "browser"): PersistedState {
     bridgeMode,
     selfId: uid(),
     blockedLog: [],
+    reminders: [],
     demoData: false,
     seenWelcome: false,
   };

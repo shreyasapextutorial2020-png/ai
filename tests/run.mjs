@@ -34,6 +34,7 @@ const libBuild = run(path.join(root, "node_modules/.bin/esbuild"), [
   "src/lib/recommend.ts",
   "src/lib/demo.ts",
   "src/lib/rooms.ts",
+  "src/lib/persist.ts",
   "src/lib/defaults.ts",
   "--bundle",
   "--format=cjs",
@@ -92,6 +93,7 @@ const suites = [
   { name: "engine", file: "tests/engine.test.mjs", env: { REGAIN_LIB_DIR: libDir } },
   { name: "relay", file: "tests/relay.test.mjs", env: { REGAIN_RELAY_PORT: String(relayPort) } },
   { name: "ui-render", file: "tests/ui-render.test.mjs", env: { REGAIN_APP_BUNDLE: appBundle } },
+  { name: "ui-resilience", file: "tests/ui-resilience.test.mjs", env: { REGAIN_APP_BUNDLE: appBundle } },
   { name: "ui-flow", file: "tests/ui-flow.test.mjs", env: { REGAIN_APP_BUNDLE: appBundle, REGAIN_RELAY_PORT: String(relayPort) } },
 ];
 

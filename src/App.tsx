@@ -148,7 +148,7 @@ function Page({ id }: { id: PageId }) {
 /* ------------------------------ app content ----------------------------- */
 
 function AppContent() {
-  const { state, actions, elapsedSec, isFocusActive } = useStore();
+  const { state, actions, elapsedSec, isFocusActive, guard } = useStore();
   const { push, node } = useToasts();
   const [page, setPage] = useState<PageId>(() => {
     const hash = window.location.hash.replace("#", "");
@@ -169,6 +169,11 @@ function AppContent() {
   }, []);
 
   // session + blocker event toasts and chimes
+  const [showShortcuts, setShowShortcuts] = useState(false);
+  const stateRef = useRef(state);
+  stateRef.current = state;
+  const guardOpenRef = useRef(false);
+  guardOpenRef.current = Boolean(guard);
   const sessionCount = useRef(state.sessions.length);
   const blockedCount = useRef(state.blockedLog.length);
   useEffect(() => {
@@ -193,6 +198,21 @@ function AppContent() {
     }
   }, [state.blockedLog, push, state.settings.tickSound]);
 
+  // Focus Guard / planner reminders surface as toasts (and native notifications)
+  const reminderCount = useRef(state.reminders.length);
+  useEffect(() => {
+    if (state.reminders.length > reminderCount.current) {
+      const last = state.reminders[state.reminders.length - 1];
+      reminderCount.current = state.reminders.length;
+      push({
+        title: last.title,
+        body: last.body,
+        tone: last.kind === "planner" ? "good" : "info",
+      });
+      if (state.settings.tickSound) ambient.cue("phase");
+    }
+  }, [state.reminders, push, state.settings.tickSound]);
+
   // pomodoro phase change chime
   const phaseRef = useRef(state.active?.phase);
   useEffect(() => {
@@ -207,6 +227,55 @@ function AppContent() {
   useEffect(() => {
     if (!isFocusActive && !state.settings.musicTrack) ambient.stop();
   }, [isFocusActive, state.settings.musicTrack]);
+
+  // ---------------------------- keyboard shortcuts ---------------------------
+  useEffect(() => {
+    const isTyping = (target: EventTarget | null) => {
+      const el = target as HTMLElement | null;
+      if (!el) return false;
+      const tag = el.tagName;
+      return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || el.isContentEditable;
+    };
+
+    const onKey = (event: KeyboardEvent) => {
+      if (isTyping(event.target) || event.metaKey || event.ctrlKey || event.altKey) return;
+      const current = stateRef.current;
+
+      if (event.key === "Escape") {
+        if (guardOpenRef.current) {
+          event.preventDefault();
+          actions.dismissGuard();
+        }
+        return;
+      }
+
+      if (event.key === " ") {
+        event.preventDefault();
+        if (current.active?.running) actions.pauseSession();
+        else if (current.active) actions.resumeSession();
+        else actions.startSession({ mode: "countdown", plannedSec: 25 * 60, label: "Quick focus" });
+        return;
+      }
+
+      if (event.key.toLowerCase() === "m") {
+        const track = current.settings.musicTrack;
+        const sound = SOUNDS.find((s) => s.id === track);
+        if (sound && (!sound.pro || current.settings.pro)) {
+          if (ambient.current()) ambient.stop();
+          else ambient.play(sound.kind, current.settings.musicVolume);
+        }
+        return;
+      }
+
+      if (event.key === "?") {
+        event.preventDefault();
+        setShowShortcuts(true);
+      }
+    };
+
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [actions]);
 
   // native notifications emitted by the Rust core land as toasts
   useEffect(() => {
@@ -316,6 +385,31 @@ function AppContent() {
             ))}
           </select>
         </div>
+      </Modal>
+
+      <Modal
+        open={showShortcuts}
+        onClose={() => setShowShortcuts(false)}
+        title="Keyboard shortcuts"
+      >
+        <div className="grid" style={{ gap: 10 }}>
+          {[
+            ["Space", "Start a quick 25 min session, pause or resume"],
+            ["M", "Toggle your soundscape on and off"],
+            ["Esc", "Dismiss the Focus Guard overlay"],
+            ["?", "Show this list"],
+          ].map(([keys, what]) => (
+            <div className="row" key={keys} style={{ gap: 12 }}>
+              <span className="chip accent mono" style={{ minWidth: 74, justifyContent: "center" }}>
+                {keys}
+              </span>
+              <span className="small">{what}</span>
+            </div>
+          ))}
+        </div>
+        <p className="small muted" style={{ marginTop: 14 }}>
+          Shortcuts are ignored while you are typing in a field, so they never eat your session notes.
+        </p>
       </Modal>
     </>
   );

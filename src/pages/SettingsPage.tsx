@@ -99,6 +99,39 @@ export function SettingsPage() {
               onChange={(v) => actions.updateSettings({ focusGuard: v })}
             />
             <Row
+              title="Focus Guard reminders"
+              body={
+                s.pro
+                  ? "Nudge me when I drift onto an unblocked but distracting app or site."
+                  : "Pro feature — nudge me when I drift into distraction mid-session."
+              }
+              on={s.focusGuardReminders}
+              disabled={!s.pro}
+              onChange={(v) => actions.updateSettings({ focusGuardReminders: v })}
+            />
+            {s.focusGuardReminders && s.pro && (
+              <div>
+                <div className="row">
+                  <span className="stat-label">Remind me after drifting for</span>
+                  <div className="spacer" />
+                  <span className="small mono">{s.focusGuardMinutes} min</span>
+                </div>
+                <input
+                  type="range"
+                  min={1}
+                  max={45}
+                  step={1}
+                  value={s.focusGuardMinutes}
+                  onChange={(e) => actions.updateSettings({ focusGuardMinutes: Number(e.target.value) })}
+                  style={{ marginTop: 8 }}
+                />
+                <div className="tiny muted" style={{ marginTop: 6 }}>
+                  Blocked apps are intercepted immediately; this only covers distraction you did not
+                  block, so Study Mode browsers and notes stay untouched.
+                </div>
+              </div>
+            )}
+            <Row
               title="Notifications"
               body="Phase changes, goal reached and blocked attempts."
               on={s.notifications}
@@ -165,6 +198,24 @@ export function SettingsPage() {
                 Leave empty to auto-detect a relay on port 8790 of this host.
               </div>
             </label>
+          </div>
+        </Card>
+
+        <Card head="Keyboard shortcuts" hint="Work without leaving the keyboard">
+          <div className="grid" style={{ gap: 8 }}>
+            {[
+              ["Space", "Quick 25 min session · pause · resume"],
+              ["M", "Toggle the soundscape"],
+              ["Esc", "Dismiss the Focus Guard overlay"],
+              ["?", "Shortcut list"],
+            ].map(([keys, what]) => (
+              <div className="row" key={keys} style={{ gap: 12 }}>
+                <span className="chip accent mono" style={{ minWidth: 74, justifyContent: "center" }}>
+                  {keys}
+                </span>
+                <span className="small">{what}</span>
+              </div>
+            ))}
           </div>
         </Card>
 

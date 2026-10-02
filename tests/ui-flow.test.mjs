@@ -19,9 +19,25 @@ const STORAGE_KEY = "regain.pc.state.v1";
 const RELAY_PORT = Number(process.env.REGAIN_RELAY_PORT || 8790);
 
 /** A countdown one second from completion, to exercise the finish path. */
+const now = new Date();
 const seededState = {
   version: 1,
-  settings: { pro: true, nickname: "TestUser", musicTrack: "" },
+  // 0.05 min = 3s floor, so the drift reminder can be observed inside the test
+  settings: { pro: true, nickname: "TestUser", musicTrack: "", focusGuardReminders: true, focusGuardMinutes: 0.05 },
+  // a scheduled block that started a minute ago, to exercise planner reminders
+  blocks: [
+    {
+      id: "block-now",
+      day: now.getDay(),
+      start: `${String(now.getHours()).padStart(2, "0")}:${String(Math.max(0, now.getMinutes() - 1)).padStart(2, "0")}`,
+      end: "23:59",
+      label: "Planner reminder block",
+      subject: "Physics",
+      colour: "#7c5cff",
+      reminder: true,
+      completedOn: [],
+    },
+  ],
   sessions: [],
   seenWelcome: true,
   active: {
@@ -47,6 +63,24 @@ const seededState = {
 };
 
 const env = createAppDom({ storage: seededState });
+
+/** Polls until `predicate` is true (state is persisted on a 350ms debounce). */
+const waitFor = async (predicate, timeoutMs = 12_000, stepMs = 250) => {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      if (predicate()) return true;
+    } catch {
+      /* keep polling */
+    }
+    await env.tick(stepMs);
+  }
+  try {
+    return Boolean(predicate());
+  } catch {
+    return false;
+  }
+};
 const report = createReporter("ui-flow");
 let remote;
 
@@ -131,6 +165,77 @@ try {
     report.check("a 👍 rating persists on the session", env.storedState().sessions?.[0]?.rating === "like", JSON.stringify(env.storedState().sessions?.[0]?.rating));
   } else {
     report.check("a 👍 rating persists on the session", false, "like button not found");
+  }
+
+  /* ------------------- 7. planner reminders ----------------------------- */
+  await env.navTo(0); // Focus Timer
+  const plannerReminder = env.storedState().reminders?.find((r) => r.kind === "planner");
+  report.check("a scheduled focus block raises a reminder", Boolean(plannerReminder), JSON.stringify(plannerReminder?.title));
+  report.check("the planner reminder names the block", /Planner reminder block/.test(plannerReminder?.title ?? ""), plannerReminder?.title);
+
+  /* -------------------- 8. Focus Guard drift reminders ------------------- */
+  // force the simulated foreground onto an unblocked but distracting site
+  env.window.__REGAIN_SIM_WINDOW__ = {
+    process_name: "chrome.exe",
+    window_title: "YouTube — recommended",
+    domain: "youtube.com",
+  };
+  await env.click(env.findButton(/^▶ Start/), 400);
+  const gotDrift = await waitFor(() =>
+    (env.storedState().reminders ?? []).some((r) => r.kind === "drift" && /YouTube/.test(r.title)),
+  );
+  const drift = (env.storedState().reminders ?? []).find((r) => r.kind === "drift");
+  report.check("drifting to an unblocked distracting site raises a Focus Guard reminder", gotDrift, JSON.stringify(drift?.title));
+  report.check("the drift reminder names the site", /YouTube/.test(drift?.title ?? ""), drift?.title);
+  report.check("the drift reminder only fires once per continuous drift", (env.storedState().reminders ?? []).filter((r) => r.kind === "drift").length === 1);
+
+  // a *blocked* distraction must be intercepted instead of nudged
+  env.window.__REGAIN_SIM_WINDOW__ = {
+    process_name: "chrome.exe",
+    window_title: "Instagram • Reels",
+    domain: "instagram.com",
+  };
+  const intercepted = await waitFor(() =>
+    (env.storedState().blockedLog ?? []).some((b) => /instagram/.test(b.key ?? "")),
+  );
+  report.check("a blocked site is intercepted", intercepted, "no block logged");
+  report.check(
+    "a blocked site is never counted as drift",
+    !(env.storedState().reminders ?? []).some((r) => r.kind === "drift" && /Instagram/i.test(r.title)),
+  );
+
+  /* ------------------------- 9. keyboard shortcuts ----------------------- */
+  env.window.__REGAIN_SIM_WINDOW__ = undefined;
+  const key = (k) => env.window.document.dispatchEvent(new env.window.KeyboardEvent("keydown", { key: k, bubbles: true }));
+  const sessionState = () => env.storedState().active;
+
+  // the current session is running; Space pauses it
+  key(" ");
+  const paused = await waitFor(() => env.storedState().active?.running === false, 5000);
+  report.check("Space pauses the running session", paused, JSON.stringify(env.storedState().active?.running));
+  key(" ");
+  const resumed = await waitFor(() => env.storedState().active?.running === true, 5000);
+  report.check("Space resumes the paused session", resumed, JSON.stringify(env.storedState().active?.running));
+
+  // shortcuts must not fire while typing
+  const noteInput = env.window.document.querySelector('input[placeholder*="Integration"]') || env.window.document.querySelector("input.input");
+  noteInput.focus();
+  const runningBefore = sessionState()?.running;
+  key(" ");
+  await env.tick(250);
+  report.check("Space is ignored while typing in a field", sessionState()?.running === runningBefore);
+  noteInput.blur();
+
+  key("?");
+  await env.tick(250);
+  const modal = [...env.window.document.querySelectorAll(".modal")].find((m) => /Keyboard shortcuts/.test(m.textContent));
+  report.check("? opens the shortcut list", Boolean(modal), "modal not found");
+  if (modal) {
+    report.check("the shortcut list documents Space and M", /Space/.test(modal.textContent) && /Toggle the soundscape|M/.test(modal.textContent));
+    key("Escape");
+    await env.tick(250);
+    const stillOpen = [...env.window.document.querySelectorAll(".modal")].some((m) => /Keyboard shortcuts/.test(m.textContent));
+    report.check("Escape closes the shortcut list", !stillOpen);
   }
 
   report.check("no runtime errors across the whole flow", env.errors.length === 0, env.errors.slice(0, 2).join(" | "));

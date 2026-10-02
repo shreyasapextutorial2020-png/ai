@@ -77,31 +77,68 @@ export function connectRoom(handlers: Handlers): RoomTransport {
 
   const url = deriveRelayUrl(handlers.relayUrl);
 
-  const connect = () => {
-    if (closed || !url || attempts >= 3) {
+  /**
+   * Detaches every handler before closing. Without this an errored socket can
+   * re-enter its own error handler through close() and recurse until the stack
+   * blows up — which is exactly what happens when no relay is running.
+   */
+  const dropSocket = (close: boolean) => {
+    const current = socket;
+    socket = null;
+    if (!current) return;
+    current.onopen = null;
+    current.onmessage = null;
+    current.onclose = null;
+    current.onerror = null;
+    if (close) {
+      try {
+        current.close();
+      } catch {
+        /* already gone */
+      }
+    }
+  };
+
+  const handleDisconnect = () => {
+    window.clearTimeout(fallbackTimer);
+    if (closed) return;
+    if (status === "online") {
+      // a healthy session dropped: try to get it back, keep working meanwhile
+      setStatus("connecting");
+      window.setTimeout(connect, 1500);
+    } else {
       fallbackToLocal();
+    }
+  };
+
+  const connect = () => {
+    if (closed || !url || attempts >= 3 || socket) {
+      if (!socket) fallbackToLocal();
       return;
     }
     attempts += 1;
+    let next: WebSocket;
     try {
-      socket = new WebSocket(url);
+      next = new WebSocket(url);
     } catch {
       fallbackToLocal();
       return;
     }
+    socket = next;
 
     // If nothing answers within 2.5s, degrade gracefully.
     fallbackTimer = window.setTimeout(() => fallbackToLocal(), 2500);
 
-    socket.onopen = () => {
+    next.onopen = () => {
       window.clearTimeout(fallbackTimer);
-      if (closed) return;
+      if (closed || socket !== next) return;
       setStatus("online");
       attempts = 0;
-      socket?.send(JSON.stringify({ t: "hello", room: room.code, member: self }));
+      next.send(JSON.stringify({ t: "hello", room: room.code, member: self }));
     };
 
-    socket.onmessage = (event) => {
+    next.onmessage = (event) => {
+      if (socket !== next) return;
       try {
         const msg = JSON.parse(String(event.data));
         if (msg.t === "state") {
@@ -113,20 +150,14 @@ export function connectRoom(handlers: Handlers): RoomTransport {
       }
     };
 
-    socket.onclose = () => {
-      window.clearTimeout(fallbackTimer);
-      if (closed) return;
-      if (status === "online") {
-        setStatus("connecting");
-        window.setTimeout(connect, 1500);
-      } else {
-        fallbackToLocal();
-      }
+    next.onclose = () => {
+      if (socket === next) dropSocket(false);
+      handleDisconnect();
     };
 
-    socket.onerror = () => {
-      window.clearTimeout(fallbackTimer);
-      socket?.close();
+    next.onerror = () => {
+      if (socket === next) dropSocket(true);
+      handleDisconnect();
     };
   };
 
@@ -160,12 +191,7 @@ export function connectRoom(handlers: Handlers): RoomTransport {
       closed = true;
       window.clearTimeout(fallbackTimer);
       post({ t: "bye", member: self });
-      try {
-        socket?.close();
-      } catch {
-        /* ignore */
-      }
-      socket = null;
+      dropSocket(true);
     },
   };
 }

@@ -184,6 +184,32 @@ export function computeStreak(sessions: SessionLog[], previous: PersistedState["
   };
 }
 
+/* ------------------------------ reminders ------------------------------ */
+
+/** Categories that count as "drift" when you are supposed to be focusing. */
+export const DISTRACTING_CATEGORIES = new Set(["social", "video", "games", "news", "shopping"]);
+
+/**
+ * Focus Guard reminders fire when an unblocked but distracting app or site
+ * keeps the foreground for `thresholdSec` inside a focus session — the
+ * "you drifted" nudge, without hard-blocking study tools or browsers.
+ */
+export function isDistractingCategory(category: string | undefined | null) {
+  return Boolean(category && DISTRACTING_CATEGORIES.has(category));
+}
+
+/** Never allow a zero/negative threshold even if a bad value is stored. */
+export function driftThresholdSec(minutes: number) {
+  return Math.max(3, Math.round((Number.isFinite(minutes) ? minutes : 15) * 60));
+}
+
+export function driftNudgeText(label: string, minutes: number) {
+  return {
+    title: `👀 Still on ${label}?`,
+    body: `${Math.max(1, Math.round(minutes))} min on a distracting ${minutes >= 2 ? "app" : "window"} during focus. Back to the timer?`,
+  };
+}
+
 export function clamp(v: number, min: number, max: number) {
   return Math.min(max, Math.max(min, v));
 }

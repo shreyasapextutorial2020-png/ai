@@ -23,10 +23,26 @@ const {
   distractionFreePercent,
   trend,
   todayKey,
+  isDistractingCategory,
+  driftThresholdSec,
+  driftNudgeText,
 } = require(`${libDir}/utils.js`);
 const { recommendSession } = require(`${libDir}/recommend.js`);
+
+const DISTRACTING = {
+  social: isDistractingCategory("social"),
+  video: isDistractingCategory("video"),
+  games: isDistractingCategory("games"),
+  news: isDistractingCategory("news"),
+  study: isDistractingCategory("study"),
+  other: isDistractingCategory("other"),
+  undefined: isDistractingCategory(undefined),
+  null: isDistractingCategory(null),
+};
 const { seedDemoHistory } = require(`${libDir}/demo.js`);
 const { makeRoomCode, makeBuddies, tickBuddies } = require(`${libDir}/rooms.js`);
+const { migrateState, pruneState } = require(`${libDir}/persist.js`);
+const { DEFAULT_SETTINGS, STATE_VERSION, initialState } = require(`${libDir}/defaults.js`);
 
 let passed = 0;
 let failed = 0;
@@ -143,6 +159,43 @@ check("buddies are created for the room", buddies.length === 3 && buddies.every(
 const ticked = tickBuddies(buddies, 60);
 check("buddy minutes never decrease", ticked.every((m, i) => m.minutes >= buddies[i].minutes));
 check("buddy minutes stay under the cap", ticked.every((m) => m.minutes <= m.targetMinutes + 60));
+
+/* ------------------------------ drift helpers --------------------------- */
+check("social / video / games / news count as drift", DISTRACTING.social && DISTRACTING.video && DISTRACTING.games && DISTRACTING.news);
+check("study and other do not count as drift", !DISTRACTING.study && !DISTRACTING.other);
+check("missing category never counts as drift", !DISTRACTING.undefined && !DISTRACTING.null);
+check("drift threshold never drops below 3s", driftThresholdSec(0) === 3 && driftThresholdSec(-5) === 3);
+check("drift threshold converts minutes to seconds", driftThresholdSec(15) === 900, String(driftThresholdSec(15)));
+check("drift threshold survives a corrupt value", driftThresholdSec(NaN) === 900, String(driftThresholdSec(NaN)));
+check("drift nudge names the app", /YouTube/.test(driftNudgeText("YouTube", 6).title), driftNudgeText("YouTube", 6).title);
+
+/* -------------------------------- migration ----------------------------- */
+const v1 = {
+  version: 1,
+  settings: { nickname: "Legacy user", pro: true, dailyGoalMinutes: 90 },
+  sessions: [{ id: "old-1", endedAt: Date.now(), actualSec: 1800, subject: "Maths", mode: "study", label: "Old", startedAt: Date.now() - 1800000, plannedSec: 1800, completed: true, strict: false, distractions: 0, blocked: 0, rating: "like", roomId: null }],
+  usage: [{ date: todayKey(), key: "chrome.exe", label: "Chrome", icon: "🌐", category: "other", kind: "app", seconds: 600 }],
+};
+const migrated = migrateState(v1, "browser");
+check("v1 state migrates instead of being dropped", Boolean(migrated));
+check("migration keeps the user's sessions", migrated?.sessions.length === 1 && migrated.sessions[0].id === "old-1");
+check("migration keeps the user's settings", migrated?.settings.nickname === "Legacy user" && migrated.settings.dailyGoalMinutes === 90);
+check("migration fills in newly added settings", migrated?.settings.focusGuardReminders === DEFAULT_SETTINGS.focusGuardReminders);
+check("migration adds the reminders array", Array.isArray(migrated?.reminders) && migrated.reminders.length === 0);
+check("migration stamps the current version", migrated?.version === STATE_VERSION, String(migrated?.version));
+check("migration keeps v1 usage rows", migrated?.usage.length === 1);
+check("migration on a partial blob fills defaults", Boolean(migrateState({ version: 1 }, "browser")?.appRules.length));
+check("garbage state is rejected", migrateState("nonsense", "browser") === null && migrateState(null, "browser") === null);
+check("a future schema version is rejected", migrateState({ version: 99 }, "browser") === null);
+check("a fresh state passes through unchanged", migrateState(initialState("browser"), "browser")?.version === STATE_VERSION);
+check("migration never invents a running session", migrateState({ version: 1 }, "browser")?.active === null);
+
+/* --------------------------------- pruning ------------------------------ */
+const stale = { ...initialState("browser"), sessions: new Array(500).fill(mk(1, 60)), blockedLog: new Array(300).fill({ id: "x", at: Date.now() }) };
+const pruned = pruneState(stale);
+check("pruning caps the session history", pruned.sessions.length === 400, String(pruned.sessions.length));
+check("pruning caps the blocked log", pruned.blockedLog.length === 200, String(pruned.blockedLog.length));
+check("pruning caps reminders", pruneState({ ...stale, reminders: new Array(50).fill({ id: "r" }) }).reminders.length === 20);
 
 /* --------------------------------- summary ------------------------------ */
 console.log(`\n${passed}/${passed + failed} engine checks passed`);

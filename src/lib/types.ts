@@ -151,6 +151,16 @@ export interface RoomMessage {
   at: number;
 }
 
+export interface Reminder {
+  id: string;
+  kind: "drift" | "planner" | "goal";
+  title: string;
+  body: string;
+  at: number;
+  /** app / domain / block id that triggered it */
+  ref?: string;
+}
+
 export interface Settings {
   theme: ThemeId;
   accent: string;
@@ -165,6 +175,7 @@ export interface Settings {
   appBlocker: boolean;
   notifications: boolean;
   focusGuard: boolean;
+  focusGuardReminders: boolean;
   focusGuardMinutes: number;
   startAtLogin: boolean;
   minimiseToTray: boolean;
@@ -213,6 +224,8 @@ export interface PersistedState {
   /** stable per-install identity used for multiplayer rooms */
   selfId: string;
   blockedLog: BlockedLogEntry[];
+  /** nudges surfaced as toasts (drift, planner, goal) */
+  reminders: Reminder[];
   /** sample history is loaded so charts are meaningful on first run */
   demoData: boolean;
   seenWelcome: boolean;
