@@ -308,15 +308,16 @@ fn update_extension_settings(
     reels_blocked: bool,
     study_mode: bool,
     channels: Vec<String>,
-    #[serde(default)] block_all: bool,
-    #[serde(default)] allowlist: Vec<String>,
+    block_all: Option<bool>,
+    allowlist: Option<Vec<String>>,
 ) {
     if let Ok(mut rules) = state.web_rules.lock() {
         rules.reels_blocked = reels_blocked;
         rules.study_mode = study_mode;
         rules.channels = channels;
-        rules.block_all = block_all;
+        rules.block_all = block_all.unwrap_or(false);
         rules.allowlist = allowlist
+            .unwrap_or_default()
             .into_iter()
             .filter_map(|d| {
                 let clean = normalize_domain(&d);
