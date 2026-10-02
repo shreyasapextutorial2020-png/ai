@@ -1,29 +1,66 @@
-/* 1. Hide Shorts icon in Navigation Sidebar */
-ytd-guide-entry-renderer:has(a[href*="/shorts"]),
-ytd-mini-guide-entry-renderer:has(a[href*="/shorts"]),
-a[title="Shorts"],
-a[href^="/shorts"] {
+/* ==========================================================================
+   Regain — YouTube Shorts shield + Study Mode
+   Applied only when the desktop app reports an active focus session.
+   ========================================================================== */
+
+/* 1. Shorts entry points -------------------------------------------------- */
+html[data-regain-reels="blocked"] ytd-guide-entry-renderer:has(a[href*="/shorts"]),
+html[data-regain-reels="blocked"] ytd-mini-guide-entry-renderer:has(a[href*="/shorts"]),
+html[data-regain-reels="blocked"] a[title="Shorts"],
+html[data-regain-reels="blocked"] a[href^="/shorts"],
+html[data-regain-reels="blocked"] ytm-pivot-bar-item-renderer:has(a[href="/shorts"]) {
   display: none !important;
 }
 
-/* 2. Hide Shorts Shelf on Home Page AND Search Results */
-ytd-reel-shelf-renderer,
-ytd-rich-section-renderer:has(ytd-rich-shelf-renderer[is-shorts]),
-grid-shelf-renderer:has(ytd-reel-shelf-renderer),
-ytd-shelf-renderer:has(ytd-reel-shelf-renderer),
-ytd-shelf-renderer:has(a[href*="/shorts"]),
-ytd-video-renderer:has(a[href*="/shorts"]) {
+/* 2. Shorts shelves and shelves containing a short ------------------------ */
+html[data-regain-reels="blocked"] ytd-reel-shelf-renderer,
+html[data-regain-reels="blocked"] ytd-rich-section-renderer:has(ytd-rich-shelf-renderer[is-shorts]),
+html[data-regain-reels="blocked"] grid-shelf-renderer:has(ytd-reel-shelf-renderer),
+html[data-regain-reels="blocked"] ytd-shelf-renderer:has(ytd-reel-shelf-renderer),
+html[data-regain-reels="blocked"] ytd-shelf-renderer:has(a[href*="/shorts"]),
+html[data-regain-reels="blocked"] ytd-video-renderer:has(a[href*="/shorts"]),
+html[data-regain-reels="blocked"] ytd-rich-item-renderer:has(a[href*="/shorts"]) {
   display: none !important;
 }
 
-/* 3. Collapse search grid container if it holds shorts */
-div#contents.ytd-reel-shelf-renderer,
-#dismissible.ytd-reel-shelf-renderer {
+/* 3. Shorts player itself ------------------------------------------------- */
+html[data-regain-reels="blocked"] ytd-shorts,
+html[data-regain-reels="blocked"] #shorts-container,
+html[data-regain-reels="blocked"] ytd-shorts-player,
+html[data-regain-reels="blocked"] #shorts-inner-container {
   display: none !important;
 }
 
-/* 4. Shorts Player view */
-ytd-shorts,
-#shorts-container {
+/* 4. Study Mode ----------------------------------------------------------- */
+html[data-regain-study-mode="true"] #related,
+html[data-regain-study-mode="true"] ytd-watch-next-secondary-results-renderer,
+html[data-regain-study-mode="true"] #comments,
+html[data-regain-study-mode="true"] ytd-comments,
+html[data-regain-study-mode="true"] #trending,
+html[data-regain-study-mode="true"] ytd-browse[page-subtype="trending"],
+html[data-regain-study-mode="true"] ytd-browse[page-subtype="subscriptions"] #contents,
+html[data-regain-study-mode="true"] ytd-rich-grid-renderer,
+html[data-regain-study-mode="true"] ytd-two-column-browse-results-renderer #secondary {
   display: none !important;
+}
+
+/* Study Mode banner so the student always knows why the page looks different */
+html[data-regain-study-mode="true"] ytd-app::before {
+  content: "🎓 Regain Study Mode — Shorts, recommendations and comments are hidden while you focus.";
+  display: block;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 9999;
+  padding: 6px 12px;
+  font: 600 12px/1.4 Inter, system-ui, sans-serif;
+  text-align: center;
+  color: #eaeaff;
+  background: linear-gradient(90deg, #7c5cff, #38bdf8);
+}
+
+/* Study Mode keeps the masthead below the banner */
+html[data-regain-study-mode="true"] ytd-masthead {
+  top: 26px !important;
 }

@@ -1,31 +1,55 @@
 {
   "manifest_version": 3,
   "name": "Regain Focus Companion",
-  "version": "1.0.0",
-  "description": "Companion extension for Regain PC to block Shorts, Reels, and distracting web feeds.",
+  "version": "1.4.0",
+  "description": "Companion for Regain PC: blocks distracting sites (including chess, game and streaming sites), hides Reels/Shorts and powers YouTube Study Mode while a focus session runs.",
   "permissions": [
     "storage",
     "alarms",
-    "declarativeNetRequest"
+    "declarativeNetRequest",
+    "scripting",
+    "tabs"
+  ],
+  "host_permissions": [
+    "*://*.youtube.com/*",
+    "*://*.instagram.com/*",
+    "*://*.facebook.com/*",
+    "*://*.snapchat.com/*",
+    "*://*.tiktok.com/*",
+    "*://*.x.com/*",
+    "*://*.twitter.com/*",
+    "*://*.reddit.com/*"
   ],
   "background": {
     "service_worker": "background.js"
   },
-  "host_permissions": [
-    "*://*.youtube.com/*",
-    "*://*.instagram.com/*",
-    "*://*.facebook.com/*"
-  ],
+  "action": {
+    "default_title": "Regain Focus Companion",
+    "default_popup": "popup.html"
+  },
   "content_scripts": [
     {
-      "matches": ["*://*.youtube.com/*"],
-      "css": ["youtube.css"],
-      "js": ["content.js"],
+      "matches": [
+        "*://*.youtube.com/*"
+      ],
+      "css": [
+        "youtube.css"
+      ],
+      "js": [
+        "content.js"
+      ],
       "run_at": "document_start"
     },
     {
-      "matches": ["*://*.instagram.com/*"],
-      "css": ["instagram.css"],
+      "matches": [
+        "*://*.instagram.com/*"
+      ],
+      "css": [
+        "instagram.css"
+      ],
+      "js": [
+        "content.js"
+      ],
       "run_at": "document_start"
     }
   ]
