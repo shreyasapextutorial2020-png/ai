@@ -169,6 +169,7 @@ export function PomodoroPage() {
             <div className="row" style={{ gap: 12 }}>
               <Toggle
                 on={cfg.autoStartBreaks}
+                label="Auto-start breaks"
                 onChange={(v) => actions.updatePomodoro({ autoStartBreaks: v })}
               />
               <div>
@@ -179,6 +180,7 @@ export function PomodoroPage() {
             <div className="row" style={{ gap: 12 }}>
               <Toggle
                 on={cfg.autoStartFocus}
+                label="Auto-start next focus round"
                 onChange={(v) => actions.updatePomodoro({ autoStartFocus: v })}
               />
               <div>

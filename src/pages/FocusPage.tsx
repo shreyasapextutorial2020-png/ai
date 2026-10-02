@@ -272,7 +272,7 @@ export function FocusPage() {
             </div>
 
             <div className="row" style={{ gap: 12 }}>
-              <Toggle on={strict} onChange={setStrict} disabled={Boolean(active)} />
+              <Toggle on={strict} onChange={setStrict} disabled={Boolean(active)} label="Strict Mode for this session" />
               <div>
                 <div style={{ fontWeight: 560, fontSize: 13.5 }}>Strict Mode for this session</div>
                 <div className="small muted">

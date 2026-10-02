@@ -346,7 +346,11 @@ export function PlannerPage() {
               </div>
             </div>
             <div className="row" style={{ gap: 12 }}>
-              <Toggle on={editing.reminder} onChange={(v) => setEditing({ ...editing, reminder: v })} />
+              <Toggle
+                on={editing.reminder}
+                label="Remind me when this block starts"
+                onChange={(v) => setEditing({ ...editing, reminder: v })}
+              />
               <div>
                 <div style={{ fontWeight: 560, fontSize: 13.5 }}>Remind me when it starts</div>
                 <div className="small muted">Uses the Focus Guard toast + a system notification.</div>

@@ -49,6 +49,7 @@ export function StrictPage() {
             <Toggle
               on={settings.strictMode}
               disabled={!settings.pro}
+              label="Enable Strict Mode for new sessions"
               onChange={(v) => actions.updateSettings({ strictMode: v })}
             />
             <div>
@@ -102,6 +103,7 @@ export function StrictPage() {
             <Toggle
               on={settings.hardcoreUninstallGuard}
               disabled={!settings.pro}
+              label="Anti-uninstall guard"
               onChange={(v) => actions.updateSettings({ hardcoreUninstallGuard: v })}
             />
             <div className="small muted">

@@ -128,3 +128,15 @@ export const ALL_NAV_ITEMS = NAV.flatMap((g) => g.items);
 export function navItem(id: PageId): NavItemDef {
   return ALL_NAV_ITEMS.find((i) => i.id === id) ?? ALL_NAV_ITEMS[0];
 }
+
+/**
+ * Route helper usable from anywhere (including non-React code): the shell
+ * listens for hash changes and switches pages.
+ */
+export function navigateTo(page: PageId) {
+  if (typeof window === "undefined") return;
+  if (window.location.hash === `#${page}`) return;
+  // Setting the hash is enough: every webview fires hashchange for us, and if
+  // the hash is already correct the shell is already on that page.
+  window.location.hash = `#${page}`;
+}

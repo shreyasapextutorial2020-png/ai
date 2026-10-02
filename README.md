@@ -25,11 +25,12 @@ browser‑preview mode so the whole product runs without a desktop build.
 | **Focus Music** | 10 soundscapes synthesised live with the Web Audio API (rain, brown/pink/white noise, ocean, fire, forest, café, lo‑fi pads, 40 Hz deep focus) — no audio files shipped |
 | **Themes** | 7 themes incl. AMOLED and Daylight, 8 accents, 5 wallpapers |
 | **Strict Mode** | Levels 1–3 (confirm → hold‑to‑quit → cannot stop), anti‑uninstall guard, strict record tracking |
+| **Accessibility** | Visible keyboard focus rings, `role="switch"` toggles with accessible names, `prefers-reduced-motion` support, higher‑contrast light theme |
 | **Focus Guard reminders** | Pro nudge when you drift onto an *unblocked* distracting app or site mid‑session (blocked apps are intercepted as usual, so Study Mode browsers and notes are untouched) |
 | **Planner reminders** | A scheduled focus block raises a notification the moment it starts |
 | **Keyboard shortcuts** | `Space` quick session / pause / resume, `M` soundscape, `Esc` dismiss the Focus Guard, `?` shortcut list |
 | **Progress** | Streaks, 10‑week consistency heatmap, subject balance, trend vs previous week, rating‑driven session suggestions |
-| **Pro** | Free vs Pro feature matrix, plan picker, demo activation |
+| **Pro** | Free vs Pro feature matrix, plan picker, demo activation. Reels/Shorts shield and YouTube Study Mode are Pro‑gated in the UI (with a one‑click upgrade path); the app/website blockers, adult‑site blocking, timers, screen time, planner and rooms stay free |
 
 ---
 
@@ -84,14 +85,14 @@ npm run test:extension  # manifest / permission / CSP validation
 ```
 
 `npm test` bundles the app with esbuild, starts a relay if one is not running,
-then runs **155 checks** across six suites:
+then runs **188 checks** across six suites:
 
 | Suite | Covers |
 | --- | --- |
 | `engine` (50) | formatting, analytics, streaks, 👍/👎 recommendations, drift helpers, v1→v2 state migration, pruning |
 | `extension` (34) | manifest ↔ shipped files, `chrome.*` usage ↔ declared permissions, host permissions ↔ content-script matches, MV3 CSP compliance (no inline scripts, no `javascript:` URLs, no `eval`) |
 | `relay` (11) | raw RFC 6455 handshake, presence, progress fan‑out, chat, reactions, leave |
-| `ui-render` (17) | every one of the 12 routes renders with zero console errors |
+| `ui-render` (30) | every one of the 12 routes renders with zero console errors, every control has an accessible name, Free/Pro gating works end to end |
 | `ui-resilience` (8) | **no relay running** → the app degrades to local mode instead of crashing |
 | `ui-flow` (35) | session completion → logging → streak, blocking toggles, audio, planner + drift reminders, keyboard shortcuts, and two clients (the jsdom app and a raw WebSocket client) sharing one room through the real relay |
 
@@ -201,7 +202,7 @@ formatting nit cannot hide a real regression.
 Verified in this workspace:
 
 * `npm run build` — TypeScript clean, 55 modules, 289 kB JS (88 kB gzip).
-* `npm test` — engine 50, extension 34, relay 11, ui‑render 17, ui‑resilience 8, ui‑flow 35 checks pass.
+* `npm test` — engine 50, extension 34, relay 11, ui‑render 30, ui‑resilience 8, ui‑flow 35 checks pass.
 * Relay verified end‑to‑end with two independent clients (presence, progress,
   chat, reactions, leave).
 * Live Vite preview serves every route; the dev server binds `0.0.0.0` and

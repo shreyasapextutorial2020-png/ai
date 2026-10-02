@@ -3,9 +3,36 @@ import { useStore } from "../store/AppStore";
 import { Card, Chip, Empty, Modal, Segmented, Toggle } from "../components/ui";
 import { CATEGORY_LABELS } from "../lib/defaults";
 import { isTauri } from "../lib/desktop";
+import { navigateTo } from "../lib/nav";
 import type { RuleMode } from "../lib/types";
 
 type Tab = "apps" | "websites" | "reels" | "study";
+
+/** Pro lock used by the Reels/Shorts shield and YouTube Study Mode. */
+function ProLock({ title, body }: { title: string; body: string }) {
+  return (
+    <div
+      className="row"
+      style={{
+        gap: 12,
+        padding: 14,
+        marginBottom: 14,
+        borderRadius: 14,
+        border: "1px solid rgba(245,158,11,.4)",
+        background: "rgba(245,158,11,.1)",
+      }}
+    >
+      <span style={{ fontSize: 22 }}>🔒</span>
+      <div style={{ flex: 1 }}>
+        <div style={{ fontWeight: 600, fontSize: 13.5 }}>{title} is a Pro feature</div>
+        <div className="small muted">{body}</div>
+      </div>
+      <button className="btn sm primary" onClick={() => navigateTo("pro")}>
+        ✨ Unlock Pro
+      </button>
+    </div>
+  );
+}
 
 const REELS_TARGETS = [
   { id: "instagram", label: "Instagram Reels", icon: "📸", host: "instagram.com" },
@@ -22,6 +49,7 @@ export function BlockingPage() {
   const [newSite, setNewSite] = useState("");
   const [newChannel, setNewChannel] = useState("");
   const [query, setQuery] = useState("");
+  const isPro = state.settings.pro;
 
   const apps = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -99,6 +127,7 @@ export function BlockingPage() {
           <div className="row" style={{ gap: 12, marginBottom: 12 }}>
             <Toggle
               on={state.settings.appBlocker}
+              label="App blocking master switch"
               onChange={(v) => actions.updateSettings({ appBlocker: v })}
             />
             <span className="small">Master switch — app blocking during focus sessions</span>
@@ -121,11 +150,11 @@ export function BlockingPage() {
                   ]}
                 />
                 {rule.custom && (
-                  <button className="btn sm ghost" onClick={() => actions.removeCustomRule(rule.id)}>
+                  <button className="btn sm ghost" onClick={() => actions.removeCustomRule(rule.id)} aria-label="Remove custom rule" title="Remove custom rule">
                     🗑️
                   </button>
                 )}
-                <Toggle on={rule.enabled} onChange={() => actions.toggleAppRule(rule.id)} />
+                <Toggle on={rule.enabled} label={`Block ${rule.name}`} onChange={() => actions.toggleAppRule(rule.id)} />
               </div>
             ))}
           </div>
@@ -151,6 +180,7 @@ export function BlockingPage() {
           <div className="row" style={{ gap: 12, marginBottom: 12 }}>
             <Toggle
               on={state.settings.websiteBlocker}
+              label="Website blocking master switch"
               onChange={(v) => actions.updateSettings({ websiteBlocker: v })}
             />
             <span className="small">Master switch — website blocking during focus sessions</span>
@@ -193,11 +223,11 @@ export function BlockingPage() {
                   ]}
                 />
                 {rule.custom && (
-                  <button className="btn sm ghost" onClick={() => actions.removeCustomRule(rule.id)}>
+                  <button className="btn sm ghost" onClick={() => actions.removeCustomRule(rule.id)} aria-label="Remove custom rule" title="Remove custom rule">
                     🗑️
                   </button>
                 )}
-                <Toggle on={rule.enabled} onChange={() => actions.toggleWebRule(rule.id)} />
+                <Toggle on={rule.enabled} label={`Block ${rule.label}`} onChange={() => actions.toggleWebRule(rule.id)} />
               </div>
             ))}
           </div>
@@ -207,9 +237,17 @@ export function BlockingPage() {
       {tab === "reels" && (
         <div className="grid cols-2" style={{ gap: 16 }}>
           <Card head="Block Reels & Shorts" hint="Keep educational long-form, remove the infinite scroll">
+            {!isPro && (
+              <ProLock
+                title="Blocking Reels & Shorts"
+                body="Free keeps the app and website blockers. Removing Reels, Shorts, Spotlight and Facebook Reels is part of Pro."
+              />
+            )}
             <div className="row" style={{ gap: 12, marginBottom: 14 }}>
               <Toggle
-                on={state.settings.blockReelsShorts}
+                on={isPro && state.settings.blockReelsShorts}
+                disabled={!isPro}
+                label="Short-form video shield"
                 onChange={(v) => actions.updateSettings({ blockReelsShorts: v })}
               />
               <div>
@@ -223,7 +261,7 @@ export function BlockingPage() {
             <div className="list">
               {REELS_TARGETS.map((t) => {
                 const rule = state.webRules.find((r) => r.domain === t.host);
-                const on = Boolean(rule?.enabled) && state.settings.blockReelsShorts;
+                const on = isPro && Boolean(rule?.enabled) && state.settings.blockReelsShorts;
                 return (
                   <div className="list-row" key={t.id}>
                     <div className="icon">{t.icon}</div>
@@ -275,9 +313,17 @@ export function BlockingPage() {
             head="YouTube Study Mode"
             hint="Only the channels you allow are playable — Shorts and the recommendation feed are removed"
           >
+            {!isPro && (
+              <ProLock
+                title="YouTube Study Mode"
+                body="The channel allow-list, hidden recommendations and removed comments are part of Pro."
+              />
+            )}
             <div className="row" style={{ gap: 12, marginBottom: 14 }}>
               <Toggle
-                on={state.settings.youtubeStudyMode}
+                on={isPro && state.settings.youtubeStudyMode}
+                disabled={!isPro}
+                label="YouTube Study Mode"
                 onChange={(v) => actions.updateSettings({ youtubeStudyMode: v })}
               />
               <span className="small">Study Mode while a focus session is running</span>
@@ -290,10 +336,20 @@ export function BlockingPage() {
                     <div className="title">{c.name}</div>
                     <div className="sub mono">{c.handle}</div>
                   </div>
-                  <button className="btn sm ghost" onClick={() => actions.removeChannel(c.id)}>
+                  <button
+                    className="btn sm ghost"
+                    onClick={() => actions.removeChannel(c.id)}
+                    aria-label={`Remove ${c.name}`}
+                    title="Remove channel"
+                  >
                     🗑️
                   </button>
-                  <Toggle on={c.enabled} onChange={() => actions.toggleChannel(c.id)} />
+                  <Toggle
+                    on={isPro && c.enabled}
+                    disabled={!isPro}
+                    label={`Allow ${c.name}`}
+                    onChange={() => actions.toggleChannel(c.id)}
+                  />
                 </div>
               ))}
               {state.channels.length === 0 && (

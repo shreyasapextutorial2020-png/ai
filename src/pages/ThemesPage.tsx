@@ -75,6 +75,7 @@ export function ThemesPage() {
               <button
                 key={c}
                 onClick={() => actions.updateSettings({ accent: c })}
+                aria-label={`Use accent colour ${c}`}
                 title={c}
                 style={{
                   width: 42,

@@ -27,8 +27,9 @@ const FEATURES: Array<[string, string, string]> = [
   ["Anti-uninstall guard", "—", "✅"],
   ["Focus music & soundscapes", "Basic", "All 10"],
   ["Premium themes & wallpapers", "2 themes", "All 7"],
-  ["Block Reels, Shorts & adult sites", "—", "✅"],
+  ["Block Reels, Shorts, Spotlight & Facebook Reels", "—", "✅"],
   ["YouTube Study Mode (channel allow-list)", "—", "✅"],
+  ["Adult-site blocking", "✅", "✅"],
   ["Focus Guard reminders", "—", "✅"],
   ["Unlimited custom block lists", "10 items", "Unlimited"],
 ];
@@ -46,8 +47,8 @@ export function ProPage() {
             <h2 style={{ margin: 0, fontSize: 26 }}>Regain Pro</h2>
             <p className="muted" style={{ margin: "6px 0 0", maxWidth: 620 }}>
               Everything that makes quitting hard: Strict Mode, Pomodoro cycles, every focus
-              soundscape, premium themes, and full Reels/Shorts + adult-site blocking with YouTube
-              Study Mode.
+              soundscape, premium themes, the Reels/Shorts shield and YouTube Study Mode.
+              Blocking adult sites and every basic blocker stays free.
             </p>
           </div>
           <div className="spacer" />

@@ -64,17 +64,23 @@ export function Toggle({
   onChange,
   disabled,
   title,
+  label,
 }: {
   on: boolean;
   onChange: (next: boolean) => void;
   disabled?: boolean;
   title?: string;
+  /** accessible name for switches that have no visible label of their own */
+  label?: string;
 }) {
   return (
     <button
       type="button"
+      role="switch"
+      aria-checked={on}
+      aria-label={label ?? title}
       title={title}
-      aria-pressed={on}
+      disabled={disabled}
       className={`toggle ${on ? "on" : ""} ${disabled ? "disabled" : ""}`}
       onClick={() => !disabled && onChange(!on)}
     />
@@ -153,7 +159,7 @@ export function Modal({
         <div className="card-head">
           <h3>{title}</h3>
           <div className="spacer" />
-          <button className="btn sm ghost" onClick={onClose}>
+          <button className="btn sm ghost" onClick={onClose} aria-label="Close dialog" title="Close">
             ✕
           </button>
         </div>

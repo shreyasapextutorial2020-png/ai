@@ -247,7 +247,7 @@ export function ScreenTimePage() {
                   >
                     👎
                   </button>
-                  <button className="btn sm ghost" onClick={() => actions.deleteSession(s.id)}>
+                  <button className="btn sm ghost" onClick={() => actions.deleteSession(s.id)} aria-label="Delete session" title="Delete session">
                     🗑️
                   </button>
                 </div>

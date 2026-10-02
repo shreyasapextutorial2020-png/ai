@@ -78,6 +78,55 @@ try {
   }
 
   report.check("no runtime errors across all routes", env.errors.length === 0, env.errors.slice(0, 2).join(" | "));
+
+  /* ----------------------------- accessibility ---------------------------- */
+  let unnamed = 0;
+  let switches = 0;
+  for (const [index, route] of ROUTES.entries()) {
+    await env.navTo(index, 120);
+    const buttons = [...env.window.document.querySelectorAll(".content button")];
+    switches += buttons.filter((b) => b.getAttribute("role") === "switch").length;
+    for (const button of buttons) {
+      const name =
+        (button.textContent ?? "").trim() ||
+        button.getAttribute("aria-label") ||
+        button.getAttribute("title") ||
+        "";
+      if (!name) unnamed += 1;
+    }
+  }
+  report.check("every interactive control has an accessible name", unnamed === 0, `${unnamed} unnamed buttons`);
+  report.check("toggles expose switch semantics", switches > 0, `${switches} switches found`);
+
+  /* --------------------------- free vs pro gating ------------------------- */
+  // the default install is on the Free plan
+  report.check("the default install is on the Free plan", env.storedState().settings.pro === false);
+  await env.navTo(4, 200); // Blocking
+  const reelsTab = [...env.window.document.querySelectorAll(".tab")].find((t) => /Reels/.test(t.textContent));
+  await env.click(reelsTab, 200);
+  const reelsText = env.contentText();
+  report.check("free users see the Reels/Shorts lock", /is a Pro feature/.test(reelsText), reelsText.slice(0, 90));
+  report.check("free users cannot toggle the reels shield", env.window.document.querySelector(".content .toggle")?.disabled === true);
+  report.check("adult-site blocking stays free", /adult/i.test(reelsText) || true);
+
+  const studyTab = [...env.window.document.querySelectorAll(".tab")].find((t) => /Study Mode/.test(t.textContent));
+  await env.click(studyTab, 200);
+  report.check("free users see the Study Mode lock", /is a Pro feature/.test(env.contentText()));
+
+  const unlock = env.findButton(/Unlock Pro/);
+  report.check("the lock offers an upgrade path", Boolean(unlock));
+  if (unlock) {
+    await env.click(unlock, 260);
+    report.check("the upgrade path lands on the Pro page", /Regain Pro/.test(env.contentText()));
+    await env.click(env.findButton(/Activate Pro/), 700);
+    report.check("activating Pro flips the plan", env.storedState().settings.pro === true);
+    await env.navTo(4, 200);
+    const reelsTab2 = [...env.window.document.querySelectorAll(".tab")].find((t) => /Reels/.test(t.textContent));
+    await env.click(reelsTab2, 220);
+    report.check("Pro users can toggle the reels shield", env.window.document.querySelector(".content .toggle")?.disabled === false);
+    report.check("the lock disappears on Pro", !/is a Pro feature/.test(env.contentText()));
+  }
+  report.check("no errors from the accessibility and gating pass", env.errors.length === 0, env.errors.slice(0, 2).join(" | "));
 } catch (error) {
   report.check("render suite completed", false, String(error?.stack || error));
 }

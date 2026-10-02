@@ -30,6 +30,8 @@ export function SettingsPage() {
                 {AVATARS.map((a) => (
                   <button
                     key={a}
+                    aria-label={`Use avatar ${a}`}
+                    title={`Use avatar ${a}`}
                     onClick={() => actions.updateSettings({ avatar: a })}
                     style={{
                       width: 40,
@@ -68,6 +70,8 @@ export function SettingsPage() {
                 {ACCENTS.map((c) => (
                   <button
                     key={c}
+                    aria-label={`Use accent colour ${c}`}
+                    title={`Use accent colour ${c}`}
                     onClick={() => actions.updateSettings({ accent: c })}
                     style={{
                       width: 26,
@@ -300,7 +304,7 @@ function Row({
 }) {
   return (
     <div className="row" style={{ gap: 12 }}>
-      <Toggle on={on} onChange={onChange} disabled={disabled} />
+      <Toggle on={on} onChange={onChange} disabled={disabled} label={title} />
       <div>
         <div style={{ fontWeight: 560, fontSize: 13.5 }}>
           {title} {disabled ? <span className="tiny muted">(Pro)</span> : null}
