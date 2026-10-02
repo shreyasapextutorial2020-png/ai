@@ -101,7 +101,8 @@ jobs:
         shell: bash
         run: |
           set +e
-          cargo check --all-targets --message-format=short 2>&1 | tee cargo-check.log
+          # human format (not --short) so proc-macro panic help text is captured
+          cargo check --all-targets --color=never 2>&1 | tee cargo-check.log
           status=${PIPESTATUS[0]}
           if [ "$status" -ne 0 ]; then
             grep -E "error(\[|:)" cargo-check.log | head -15 | while IFS= read -r line; do
@@ -133,9 +134,12 @@ jobs:
           [ -f "$file" ] || echo "cargo produced no output" > "$file"
           first=$(grep -m1 -E "error(\[|:)" "$file" | cut -c1-130)
           [ -n "$first" ] || first=$(tail -1 "$file" | cut -c1-130)
+          # keep the lines around the first error: proc macro panics explain
+          # themselves in the following lines ("= help: message: ...")
+          detail=$(grep -A 12 -m1 -E "error(\[|:)" "$file" | head -20)
           gh api "repos/${{ github.repository }}/statuses/${{ github.sha }}" \
             -f state=failure -f context="rust-diagnostics (${{ matrix.os }})" -f description="$first" >/dev/null
-          body=$(printf 'Rust core failed on %s\n\n```\n%s\n```' "${{ matrix.os }}" "$(tail -c 12000 "$file")")
+          body=$(printf 'Rust core failed on %s\n\n```\n%s\n\n--- log tail ---\n%s\n```' "${{ matrix.os }}" "$detail" "$(tail -c 6000 "$file")")
           gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/comments" -f body="$body" >/dev/null
 
   extension:
