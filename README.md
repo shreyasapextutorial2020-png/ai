@@ -15,14 +15,15 @@ browser‑preview mode so the whole product runs without a desktop build.
 | --- | --- |
 | **Focus Timer** | Study (open‑ended), Stopwatch with laps, Countdown with presets 5–180 min, subject tagging, per‑session 👍/👎 |
 | **Pomodoro** | Adjustable focus/short/long lengths, rounds before a long break, auto‑start breaks and focus, live phase ring |
-| **App Blocker** | 20+ preloaded Windows processes (Instagram, TikTok, Snapchat, X, Reddit, Discord, Steam, Free Fire…), custom additions, "in focus" vs "always" per rule |
-| **Website Blocker** | 20+ domains incl. adult sites, subdomain matching, bulk "block all" by category, custom domains |
+| **App Blocker** | 44 preloaded processes (Instagram, TikTok, Snapchat, Discord, Steam, **Chess.com, Lichess, RummyCircle, Dream11**, Roblox, Valorant, browsers…), custom additions, "in focus" vs "always" per rule, per-rule hit counter and a **Test** button that proves a rule fires |
+| **Website Blocker** | 60 domains incl. chess/board games, casual web games, streaming, chat and always-on adult sites; pasted links are normalised, subdomains match (`play.chess.com` ← `chess.com`), quick presets arm a whole category, and "Always" rules are enforced outside focus sessions too |
+| **Extension popup** | Block the site you are on in one click, keep your own always-blocked list that works with the desktop app closed, and see whether the app is connected |
 | **Block Reels & Shorts** | Hides Instagram Reels, YouTube Shorts, Snapchat Spotlight and Facebook Reels; `/shorts/` URLs are intercepted and media paused |
 | **YouTube Study Mode** | Channel allow‑list; home feed, recommendations, comments and trending are removed while you focus |
 | **Screen Time Tracker** | Per‑app and per‑site usage, category donut, 14‑day focus chart, blocked‑attempt log, session history with ratings |
 | **Multiplayer Rooms** | Real WebSocket study rooms with shared leaderboard, chat, reactions and a zero‑dependency relay server |
 | **Focus Planner** | Weekly grid, drag‑free block editor, completion ticks, "start this block" one‑click |
-| **Focus Music** | 10 soundscapes synthesised live with the Web Audio API (rain, brown/pink/white noise, ocean, fire, forest, café, lo‑fi pads, 40 Hz deep focus) — no audio files shipped |
+| **Focus Music** | 30 soundscapes synthesised live with the Web Audio API — noise masking, nature (rain, thunderstorm, stream, wind, ocean, fire, forest, crickets, chimes), places (café, library, night train, typing, cabin hum), music (lo‑fi pads/piano/jazz/beats, chillwave, synthwave, ambient, singing bowls, tanpura, bansuri) and brainwave drones (40 Hz, alpha, theta) — plus a **layer mixer** to stack up to 3 extra sounds. No audio files shipped |
 | **Themes** | 7 themes incl. AMOLED and Daylight, 8 accents, 5 wallpapers |
 | **Strict Mode** | Levels 1–3 (confirm → hold‑to‑quit → cannot stop), anti‑uninstall guard, strict record tracking |
 | **Accessibility** | Visible keyboard focus rings, `role="switch"` toggles with accessible names, `prefers-reduced-motion` support, higher‑contrast light theme |
@@ -87,17 +88,17 @@ npm run icons           # regenerate icons/icon.icns from the PNG set
 ```
 
 `npm test` bundles the app with esbuild, starts a relay if one is not running,
-then runs **222 checks** across seven suites:
+then runs **276 checks** across seven suites:
 
 | Suite | Covers |
 | --- | --- |
-| `engine` (50) | formatting, analytics, streaks, 👍/👎 recommendations, drift helpers, v1→v2 state migration, pruning |
+| `engine` (103) | formatting, analytics, streaks, 👍/👎 recommendations, drift helpers, state migration, pruning, plus domain/process matching: URL normalisation, subdomain rules, real-world process and window-title matching, preset bundles, catalogue integrity |
 | `icons` (32) | every bundled icon exists, is 8‑bit RGBA (Tauri rejects RGB at compile time), the ICO/ICNS containers parse, and the Tauri window/capability config is consistent |
-| `extension` (34) | manifest ↔ shipped files, `chrome.*` usage ↔ declared permissions, host permissions ↔ content-script matches, MV3 CSP compliance (no inline scripts, no `javascript:` URLs, no `eval`) |
+| `extension` (50) | manifest ↔ shipped files, `chrome.*` usage ↔ declared permissions, MV3 CSP compliance, and the blocking contract: anchored `||domain^` filters, case-insensitive matching, sub-frames covered, always-rules outranking focus-rules, popup one-click blocking, standalone `localDomains` |
 | `relay` (11) | raw RFC 6455 handshake, presence, progress fan‑out, chat, reactions, leave |
 | `ui-render` (30) | every one of the 12 routes renders with zero console errors, every control has an accessible name, Free/Pro gating works end to end |
 | `ui-resilience` (8) | **no relay running** → the app degrades to local mode instead of crashing |
-| `ui-flow` (35) | session completion → logging → streak, blocking toggles, audio, planner + drift reminders, keyboard shortcuts, and two clients (the jsdom app and a raw WebSocket client) sharing one room through the real relay |
+| `ui-flow` (42) | session completion → logging → streak, blocking presets + per-rule Test button, chess.com and Chess.exe interception, layered audio, planner + drift reminders, keyboard shortcuts, and two clients sharing one room through the real relay |
 
 ---
 
@@ -156,7 +157,7 @@ unit-tested.
 
 | Direction | Frame |
 | --- | --- |
-| app → extension | `{type:"FOCUS_MODE_STATE", active, strict, domains, reelsBlocked, studyMode, channels}` |
+| app → extension | `{type:"FOCUS_MODE_STATE", active, strict, rules:[{domain,always}], domains, reelsBlocked, studyMode, channels}` |
 | app → extension | `{type:"TIMER", mode, remainingSec, plannedSec, label}` |
 | extension → app | `{type:"ACTIVE_DOMAIN", domain, url, title}` |
 
@@ -210,8 +211,8 @@ macOS builds) was found and fixed.
 
 Verified in this workspace:
 
-* `npm run build` — TypeScript clean, 55 modules, 298 kB JS (91 kB gzip).
-* `npm test` — engine 50, extension 34, icons 32, relay 11, ui‑render 30, ui‑resilience 8, ui‑flow 35 checks pass.
+* `npm run build` — TypeScript clean, 322 kB JS (98 kB gzip) plus 15 kB CSS.
+* `npm test` — engine 103, extension 50, icons 32, relay 11, ui‑render 30, ui‑resilience 8, ui‑flow 42 checks pass.
 * Relay verified end‑to‑end with two independent clients (presence, progress,
   chat, reactions, leave).
 * Live Vite preview serves every route; the dev server binds `0.0.0.0` and

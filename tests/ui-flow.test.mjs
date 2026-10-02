@@ -109,6 +109,27 @@ try {
   const rules = env.storedState().appRules || [];
   report.check("toggling a rule persists to storage", rules.some((r) => r.custom === undefined || r.enabled !== undefined) && Boolean(firstToggle));
 
+  // one tap arms a whole category (the fix for "chess.com is never blocked")
+  const chessPreset = env.findButton(/Chess & board games/);
+  await env.click(chessPreset, 400);
+  const chessRules = (env.storedState().webRules ?? []).filter((r) => /chess|lichess/.test(r.domain));
+  report.check(
+    "the chess preset arms the chess sites",
+    chessRules.length >= 3 && chessRules.every((r) => r.enabled),
+    JSON.stringify(chessRules.map((r) => `${r.domain}:${r.enabled}`)),
+  );
+
+  // "Test" must prove a rule is wired up end to end
+  const before = (env.storedState().blockedLog ?? []).length;
+  const testButton = env.window.document.querySelector('.list-row button[aria-label^="Test blocking"]');
+  await env.click(testButton, 300);
+  const testLogged = await waitFor(() => (env.storedState().blockedLog ?? []).length > before, 5000);
+  report.check(
+    "the Test button logs a real block",
+    testLogged,
+    `found=${Boolean(testButton)} before=${before} after=${(env.storedState().blockedLog ?? []).length} errors=${env.errors.slice(0, 1)}`,
+  );
+
   /* ---------------------------- 4. focus music ----------------------------- */
   await env.navTo(3);
   const soundCards = [...env.window.document.querySelectorAll(".sound-card")];
@@ -117,6 +138,18 @@ try {
   report.check("the focus-music library lists all soundscapes", soundCards.length >= 10, `${soundCards.length} cards`);
   report.check("selecting a sound marks it active", Boolean(rainCard?.classList.contains("active")));
   report.check("the audio engine runs without errors", env.errors.length === 0, env.errors[0]);
+
+  // layering: rain is playing, add brown noise underneath it
+  const layerButton = env.window.document.querySelector('button[aria-label="Add Brown noise layer"]');
+  await env.click(layerButton, 300);
+  const layered = await waitFor(() => (env.storedState().settings?.musicLayers ?? []).includes("brown"), 5000);
+  const layers = env.storedState().settings?.musicLayers ?? [];
+  report.check(
+    "a second soundscape layers onto the mix",
+    layered,
+    `found=${Boolean(layerButton)} layers=${JSON.stringify(layers)} playing=${JSON.stringify(env.contentText().match(/Now playing/)?.length)}`,
+  );
+  report.check("the live mix shows both layers", /Live mix/.test(env.contentHtml()));
 
   /* ---------------------- 5. multiplayer study rooms ------------------------ */
   await env.navTo(8);
@@ -203,6 +236,36 @@ try {
     "a blocked site is never counted as drift",
     !(env.storedState().reminders ?? []).some((r) => r.kind === "drift" && /Instagram/i.test(r.title)),
   );
+
+  // chess.com: the site rule catches the browser tab…
+  env.window.__REGAIN_SIM_WINDOW__ = {
+    process_name: "chrome.exe",
+    window_title: "Chess.com — Play Chess Online",
+    domain: "chess.com",
+  };
+  const chessBlocked = await waitFor(() =>
+    (env.storedState().blockedLog ?? []).some((b) => /chess\.com/.test(b.key ?? "")),
+  );
+  report.check("a chess.com tab is intercepted while focusing", chessBlocked, "no chess.com block logged");
+  report.check(
+    "the subdomain rule also covers play.chess.com",
+    (() => {
+      env.window.__REGAIN_SIM_WINDOW__ = {
+        process_name: "chrome.exe",
+        window_title: "Play Chess",
+        domain: "play.chess.com",
+      };
+      return waitFor(() =>
+        (env.storedState().blockedLog ?? []).filter((b) => /play\.chess\.com/.test(b.key ?? "")).length > 0,
+      );
+    })(),
+  );
+  // …and the app rule catches the desktop app, process "Chess.exe"
+  env.window.__REGAIN_SIM_WINDOW__ = { process_name: "Chess.exe", window_title: "Chess.com - Play Chess" };
+  const chessAppBlocked = await waitFor(() =>
+    (env.storedState().blockedLog ?? []).some((b) => /^chess/i.test(b.key ?? "")),
+  );
+  report.check("the chess desktop app is caught by the same rule", chessAppBlocked, "no chess.exe block logged");
 
   /* ------------------------- 9. keyboard shortcuts ----------------------- */
   env.window.__REGAIN_SIM_WINDOW__ = undefined;

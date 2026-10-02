@@ -1,9 +1,15 @@
 {
   "manifest_version": 3,
   "name": "Regain Focus Companion",
-  "version": "1.1.0",
-  "description": "Companion for Regain PC: blocks Reels, Shorts and distracting sites, and powers YouTube Study Mode while a focus session runs.",
-  "permissions": ["storage", "alarms", "declarativeNetRequest", "scripting", "tabs"],
+  "version": "1.2.0",
+  "description": "Companion for Regain PC: blocks distracting sites (including chess, game and streaming sites), hides Reels/Shorts and powers YouTube Study Mode while a focus session runs.",
+  "permissions": [
+    "storage",
+    "alarms",
+    "declarativeNetRequest",
+    "scripting",
+    "tabs"
+  ],
   "host_permissions": [
     "*://*.youtube.com/*",
     "*://*.instagram.com/*",
@@ -23,15 +29,27 @@
   },
   "content_scripts": [
     {
-      "matches": ["*://*.youtube.com/*"],
-      "css": ["youtube.css"],
-      "js": ["content.js"],
+      "matches": [
+        "*://*.youtube.com/*"
+      ],
+      "css": [
+        "youtube.css"
+      ],
+      "js": [
+        "content.js"
+      ],
       "run_at": "document_start"
     },
     {
-      "matches": ["*://*.instagram.com/*"],
-      "css": ["instagram.css"],
-      "js": ["content.js"],
+      "matches": [
+        "*://*.instagram.com/*"
+      ],
+      "css": [
+        "instagram.css"
+      ],
+      "js": [
+        "content.js"
+      ],
       "run_at": "document_start"
     }
   ]

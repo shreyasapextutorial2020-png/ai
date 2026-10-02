@@ -36,6 +36,7 @@ const libBuild = run(path.join(root, "node_modules/.bin/esbuild"), [
   "src/lib/rooms.ts",
   "src/lib/persist.ts",
   "src/lib/defaults.ts",
+  "src/lib/blocking.ts",
   "--bundle",
   "--format=cjs",
   `--outdir=${libDir}`,

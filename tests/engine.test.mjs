@@ -28,6 +28,18 @@ const {
   driftNudgeText,
 } = require(`${libDir}/utils.js`);
 const { recommendSession } = require(`${libDir}/recommend.js`);
+const {
+  domainMatches,
+  findMatchingRule,
+  guessCategory,
+  labelForDomain,
+  matchesProcessRule,
+  normalizeDomain,
+  normalizeProcess,
+  splitByMode,
+  suggestedAppsForDomain,
+} = require(`${libDir}/blocking.js`);
+const { APP_CATALOGUE, SOUNDS, WEB_CATALOGUE } = require(`${libDir}/defaults.js`);
 
 const DISTRACTING = {
   social: isDistractingCategory("social"),
@@ -196,6 +208,79 @@ const pruned = pruneState(stale);
 check("pruning caps the session history", pruned.sessions.length === 400, String(pruned.sessions.length));
 check("pruning caps the blocked log", pruned.blockedLog.length === 200, String(pruned.blockedLog.length));
 check("pruning caps reminders", pruneState({ ...stale, reminders: new Array(50).fill({ id: "r" }) }).reminders.length === 20);
+
+/* --------------------------- domain normalisation ------------------------ */
+check("a pasted https URL is reduced to its domain", normalizeDomain("https://www.Chess.com/play?x=1#b") === "chess.com", normalizeDomain("https://www.Chess.com/play?x=1#b"));
+check("a bare domain passes through", normalizeDomain("lichess.org") === "lichess.org");
+check("uppercase and stray spaces are handled", normalizeDomain("  LICHESS.ORG  ") === "lichess.org");
+check("ports are stripped", normalizeDomain("chess.com:8080/play") === "chess.com");
+check("mobile subdomains fold onto the parent", normalizeDomain("m.youtube.com") === "youtube.com");
+check("credentials in a URL are ignored", normalizeDomain("https://user:pw@chess.com/x") === "chess.com");
+check("junk is rejected instead of blocking something random", normalizeDomain("not a domain") === "" && normalizeDomain("chess") === "" && normalizeDomain("") === "");
+check("IP-looking hosts are rejected", normalizeDomain("192.168.1.1") === "");
+
+check("a rule blocks its own domain", domainMatches("chess.com", "chess.com"));
+check("a rule blocks subdomains", domainMatches("chess.com", "play.chess.com") && domainMatches("chess.com", "www.chess.com"));
+check("a rule ignores lookalike domains", !domainMatches("chess.com", "chess.community.example") && !domainMatches("chess.com", "notchess.com"));
+check("a pasted URL works as a rule", domainMatches("https://www.chess.com/play", "play.chess.com"));
+
+check("labels are prettified", labelForDomain("chess.com") === "Chess.com", labelForDomain("chess.com"));
+const chessGuess = guessCategory("play.chess.com");
+check("typed chess domains get the game category", chessGuess.category === "games" && chessGuess.icon === "♟️", JSON.stringify(chessGuess));
+check("streaming domains are recognised", guessCategory("netflix.com").category === "video");
+check("unknown domains fall back to a generic icon", guessCategory("example.com").category === "other");
+
+/* ---------------------------- process matching -------------------------- */
+check("a rule matches the exact process", matchesProcessRule("chess.exe", "Chess.exe"));
+check("a rule matches without the .exe suffix", matchesProcessRule("chess", "Chess.exe"));
+check("a rule matches a longer real process name", matchesProcessRule("chess", "chess.com.exe"));
+check("a rule matches a full path", matchesProcessRule("chess.exe", "C:\\Program Files\\Chess.com\\Chess.exe"));
+check("a rule matches the window title when the process is generic", matchesProcessRule("chess.com", "chrome.exe", "Chess.com - Play Chess Online"));
+check("a rule matches a title that dropped the TLD", matchesProcessRule("chess.com", "app.exe", "Chess — Play Chess"));
+check("unrelated processes are not blocked", !matchesProcessRule("chess", "chrome.exe", "Physics lecture 4"));
+check("short rules do not nuke unrelated titles", !matchesProcessRule("x", "chrome.exe", "Flexbox guide"), "single-char rule matched a title");
+check("empty input is never a match", !matchesProcessRule("", "chess.exe") && !matchesProcessRule("chess", ""));
+check("the first matching rule is reported", findMatchingRule(["steam", "chess", "tiktok"], "Chess.exe") === "chess");
+check("no rule means no match", findMatchingRule(["steam"], "chess.exe", "Chess") === null);
+check("process normalisation strips paths and extensions", normalizeProcess("C:\\Games\\Chess.exe") === "chess");
+
+check("blocking a site suggests its desktop app", suggestedAppsForDomain("chess.com").includes("Chess.exe"), suggestedAppsForDomain("chess.com").join(", "));
+check("an unknown site still offers a best guess", suggestedAppsForDomain("newthing.com").includes("newthing.exe"));
+
+check("splitByMode separates focus rules from always rules", JSON.stringify(splitByMode([
+  { enabled: true, mode: "focus", id: "a" },
+  { enabled: true, mode: "always", id: "b" },
+  { enabled: false, mode: "always", id: "c" },
+]).always.map((r) => r.id)) === '["b"]');
+check("splitByMode drops disabled rules entirely", splitByMode([
+  { enabled: false, mode: "focus", id: "a" },
+]).focus.length === 0);
+
+/* ----------------------------- catalogues ------------------------------- */
+const chessSite = WEB_CATALOGUE.find((r) => r.domain === "chess.com");
+check("chess.com is blocked by default", Boolean(chessSite?.enabled), JSON.stringify(chessSite));
+check("chess sites cover the usual suspects", ["chess.com", "lichess.org", "chess24.com"].every((d) => WEB_CATALOGUE.some((r) => r.domain === d)));
+check("casual web-game sites are in the catalogue", ["friv.com", "poki.com", "y8.com", "crazygames.com"].every((d) => WEB_CATALOGUE.some((r) => r.domain === d)));
+check("every site rule has a valid domain", WEB_CATALOGUE.every((r) => normalizeDomain(r.domain) === r.domain), WEB_CATALOGUE.filter((r) => normalizeDomain(r.domain) !== r.domain).map((r) => r.domain).join(", "));
+check("no duplicate site rules", new Set(WEB_CATALOGUE.map((r) => r.domain)).size === WEB_CATALOGUE.length);
+check("adult sites are always-on", WEB_CATALOGUE.filter((r) => r.category === "adult").every((r) => r.mode === "always"));
+check("every category used by presets has rules", ["games", "video", "social", "chat", "shopping", "adult"].every((c) => WEB_CATALOGUE.some((r) => r.category === c)));
+check("the site catalogue is substantially bigger than before", WEB_CATALOGUE.length >= 55, `${WEB_CATALOGUE.length} sites`);
+check("the app catalogue is substantially bigger than before", APP_CATALOGUE.length >= 40, `${APP_CATALOGUE.length} apps`);
+check("chess desktop apps are covered", APP_CATALOGUE.some((r) => normalizeProcess(r.process) === "chess" || normalizeProcess(r.process) === "chess.com"));
+check("every app rule has a usable pattern", APP_CATALOGUE.every((r) => r.process.trim().length > 0));
+check("no duplicate app rules", new Set(APP_CATALOGUE.map((r) => normalizeProcess(r.process))).size === APP_CATALOGUE.length, APP_CATALOGUE.map((r) => normalizeProcess(r.process)).join(", "));
+check("an already-blocked app matches the catalogue rule", findMatchingRule(APP_CATALOGUE.map((r) => r.process), "Chess.exe", "Chess.com - Play") !== null);
+check("a generic browser window is not matched by the chess rule", !matchesProcessRule("chess", "chrome.exe", "Physics lecture"));
+
+/* ------------------------------- music ---------------------------------- */
+check("the sound library grew past 25 soundscapes", SOUNDS.length >= 25, `${SOUNDS.length} sounds`);
+check("every sound has a unique id", new Set(SOUNDS.map((s) => s.id)).size === SOUNDS.length);
+check("every sound has an icon and a name", SOUNDS.every((s) => s.icon && s.name));
+check("every sound has a category the UI knows", SOUNDS.every((s) => ["noise", "nature", "place", "music", "focus"].includes(s.category)), SOUNDS.map((s) => `${s.id}:${s.category}`).join(" "));
+check("the music category actually contains music", SOUNDS.filter((s) => s.category === "music").length >= 8, `${SOUNDS.filter((s) => s.category === "music").length} music tracks`);
+check("free users still get usable sounds", SOUNDS.filter((s) => !s.pro).length >= 8, `${SOUNDS.filter((s) => !s.pro).length} free sounds`);
+check("the default track exists in the catalogue", SOUNDS.some((s) => s.id === DEFAULT_SETTINGS.musicTrack));
 
 /* --------------------------------- summary ------------------------------ */
 console.log(`\n${passed}/${passed + failed} engine checks passed`);

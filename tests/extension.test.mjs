@@ -142,6 +142,26 @@ check("study-mode rules are gated on the study-mode attribute", /data-regain-stu
 const manifestJson = JSON.stringify(manifest);
 check("extension never asks for screen or camera access", !/desktopCapture|tabCapture|camera|microphone/.test(manifestJson + allJs));
 
+
+/* --------------------- site blocking really blocks sites ----------------- */
+
+check("rules are anchored to the domain, not a prefix", /urlFilter:\s*`\|\|\$\{rule\.domain\}\^`/.test(background), "urlFilter must be ||domain^ so chess.com does not match chess.community");
+check("matching is case-insensitive", /isUrlFilterCaseSensitive:\s*false/.test(background));
+check("sub-frames and pop-ups are covered too", /resourceTypes:\s*\["main_frame",\s*"sub_frame"\]/.test(background));
+check("always-rules outrank focus-rules", /priority:\s*rule\.always\s*\?\s*3\s*:\s*1/.test(background));
+check("focus rules only apply while a session runs", /rules\.filter\(\(rule\) => rule\.always\)/.test(background));
+check("the extension keeps its own always-blocked list", /localDomains/.test(background) && /ADD_DOMAIN/.test(background));
+check("a site can be blocked from the popup in one click", /BLOCK_ACTIVE_TAB/.test(background) && /Block this site/.test(read("popup.html")));
+check("popup lists and removes local domains", /REMOVE_DOMAIN/.test(read("popup.js")) && /local-list/.test(read("popup.html")));
+check("popup reports whether the desktop app is connected", /Desktop app connected/.test(read("popup.js")));
+check("popup normalises whatever the user types", /function normalize/.test(read("popup.js")));
+check("the block screen distinguishes always from focus rules", /always-blocked list/.test(read("blocked.js")) && /focus session is running/.test(read("blocked.js")));
+check("the block screen shows the remaining session time", /left in this session/.test(read("blocked.js")));
+check("the app-provided rules are preferred over the flat domain list", /Array\.isArray\(state\.rules\)/.test(background));
+check("the badge counts the rules that are live right now", /setBadgeText/.test(background) && /activeRules\(state\)/.test(background));
+check("the extension never ships page content anywhere", !/fetch\(|XMLHttpRequest/.test(read("background.js") + read("content.js") + read("popup.js")));
+check("manifest version reflects the blocking rewrite", /^1\.[2-9]\d*\.\d+$/.test(manifest.version), manifest.version);
+
 console.log(`\nextension: ${passed} passed, ${failures.length} failed`);
 for (const f of failures) console.log(`  ✗ ${f}`);
 process.exit(failures.length ? 1 : 0);

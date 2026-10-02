@@ -1,12 +1,36 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useStore } from "../store/AppStore";
 import { Card, Chip, Empty, Modal, Segmented, Toggle } from "../components/ui";
 import { CATEGORY_LABELS } from "../lib/defaults";
-import { isTauri } from "../lib/desktop";
+import { getBridgeStatus, isTauri } from "../lib/desktop";
 import { navigateTo } from "../lib/nav";
-import type { RuleMode } from "../lib/types";
+import { normalizeDomain, suggestedAppsForDomain } from "../lib/blocking";
+import type { RuleCategory, RuleMode } from "../lib/types";
 
 type Tab = "apps" | "websites" | "reels" | "study";
+
+/** One-tap bundles: the distractions students actually ask to block. */
+const PRESETS: Array<{ id: string; label: string; icon: string; categories: RuleCategory[]; extraDomains?: string[] }> = [
+  { id: "chess", label: "Chess & board games", icon: "♟️", categories: ["games"] },
+  { id: "video", label: "Streaming & short video", icon: "🎬", categories: ["video"] },
+  { id: "social", label: "Social media", icon: "📱", categories: ["social"] },
+  { id: "chat", label: "Chat apps & sites", icon: "💬", categories: ["chat"] },
+  { id: "shopping", label: "Shopping", icon: "🛒", categories: ["shopping"] },
+  { id: "adult", label: "Adult sites (always blocked)", icon: "🔞", categories: ["adult"] },
+];
+
+/** Per-rule hit counter, so a rule that never fires is obvious at a glance. */
+function useHitCounts() {
+  const { state } = useStore();
+  return useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const entry of state.blockedLog) {
+      const key = String(entry.key ?? "").toLowerCase();
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    return counts;
+  }, [state.blockedLog]);
+}
 
 /** Pro lock used by the Reels/Shorts shield and YouTube Study Mode. */
 function ProLock({ title, body }: { title: string; body: string }) {
@@ -49,7 +73,28 @@ export function BlockingPage() {
   const [newSite, setNewSite] = useState("");
   const [newChannel, setNewChannel] = useState("");
   const [query, setQuery] = useState("");
+  const [siteQuery, setSiteQuery] = useState("");
+  const [bridgeClients, setBridgeClients] = useState<number | null>(null);
+  const [justTested, setJustTested] = useState<string>("");
+  const [addError, setAddError] = useState<string>("");
+  const [addedNote, setAddedNote] = useState<string>("");
+  const hits = useHitCounts();
   const isPro = state.settings.pro;
+
+  useEffect(() => {
+    if (!isTauri()) return;
+    let alive = true;
+    const poll = async () => {
+      const status = await getBridgeStatus();
+      if (alive && status) setBridgeClients(status.clients);
+    };
+    void poll();
+    const id = window.setInterval(poll, 5000);
+    return () => {
+      alive = false;
+      window.clearInterval(id);
+    };
+  }, []);
 
   const apps = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -59,11 +104,11 @@ export function BlockingPage() {
   }, [state.appRules, query]);
 
   const sites = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const q = siteQuery.trim().toLowerCase();
     return state.webRules
       .filter((r) => !q || r.label.toLowerCase().includes(q) || r.domain.includes(q))
       .sort((a, b) => Number(b.enabled) - Number(a.enabled) || a.label.localeCompare(b.label));
-  }, [state.webRules, query]);
+  }, [state.webRules, siteQuery]);
 
   const enabledApps = state.appRules.filter((r) => r.enabled).length;
   const enabledSites = state.webRules.filter((r) => r.enabled).length;
@@ -83,11 +128,63 @@ export function BlockingPage() {
           <Chip tone={state.settings.blockReelsShorts ? "good" : "warn"}>
             {state.settings.blockReelsShorts ? "Reels & Shorts blocked" : "Reels & Shorts allowed"}
           </Chip>
+          {isTauri() && (
+            <Chip tone={bridgeClients ? "good" : "warn"}>
+              {bridgeClients
+                ? `Extension connected (${bridgeClients})`
+                : "Extension not detected — site blocking needs it"}
+            </Chip>
+          )}
           <div className="spacer" />
           <span className="small muted">
             {blockedToday.length} blocked today · watching: {currentWindow?.process_name ?? "—"}
+            {currentWindow?.window_title ? ` · ${currentWindow.window_title.slice(0, 42)}` : ""}
           </span>
         </div>
+      </Card>
+
+      <Card
+        head="Quick presets"
+        hint="One tap arms a whole category — chess.com, lichess, casual game sites, streaming and more"
+      >
+        <div className="row wrap" style={{ gap: 8 }}>
+          {PRESETS.map((preset) => {
+            const targets = state.webRules.filter((r) => preset.categories.includes(r.category));
+            const appsToo = state.appRules.filter((r) => preset.categories.includes(r.category));
+            const allOn =
+              targets.length > 0 &&
+              targets.every((r) => r.enabled) &&
+              (appsToo.length === 0 || appsToo.every((r) => r.enabled));
+            return (
+              <button
+                key={preset.id}
+                className={`btn sm ${allOn ? "primary" : ""}`}
+                title={
+                  allOn
+                    ? `Unblock all ${preset.label.toLowerCase()}`
+                    : `Block ${targets.length} site(s) and ${appsToo.length} app(s): ${preset.label}`
+                }
+                onClick={() => {
+                  const enable = !allOn;
+                  preset.categories.forEach((category) =>
+                    actions.setCategoryEnabled(category, enable, category === "adult" ? "always" : undefined),
+                  );
+                  actions.updateSettings({
+                    appBlocker: enable ? true : state.settings.appBlocker,
+                    websiteBlocker: enable ? true : state.settings.websiteBlocker,
+                  });
+                }}
+              >
+                {preset.icon} {preset.label}
+                <span className="tiny muted"> · {targets.length + appsToo.length}</span>
+              </button>
+            );
+          })}
+        </div>
+        <p className="tiny muted" style={{ marginTop: 10 }}>
+          Rules marked <strong>Always</strong> bite outside focus sessions too — use them for the sites you never
+          want to open. Everything else is enforced only while a session runs.
+        </p>
       </Card>
 
       <div className="tabs">
@@ -141,6 +238,21 @@ export function BlockingPage() {
                   <div className="sub mono">{rule.process}</div>
                 </div>
                 <Chip className="tiny">{CATEGORY_LABELS[rule.category]}</Chip>
+                <Chip tone={(hits.get(rule.process.toLowerCase()) ?? 0) > 0 ? "good" : ""} className="tiny">
+                  {hits.get(rule.process.toLowerCase()) ?? 0} blocked
+                </Chip>
+                <button
+                  className="btn sm ghost"
+                  title={`Test that ${rule.name} is caught — logs a block now`}
+                  aria-label={`Test blocking ${rule.name}`}
+                  onClick={() => {
+                    actions.testBlock("app", rule.process);
+                    setJustTested(rule.process);
+                    window.setTimeout(() => setJustTested(""), 2500);
+                  }}
+                >
+                  {justTested === rule.process ? "✓ caught" : "Test"}
+                </button>
                 <Segmented<RuleMode>
                   value={rule.mode}
                   onChange={(mode) => actions.setRuleMode(rule.id, "app", mode)}
@@ -170,11 +282,20 @@ export function BlockingPage() {
       {tab === "websites" && (
         <Card
           head="Website blocker"
-          hint="Domain-level blocking, enforced by the Regain companion extension and DNS rules"
+          hint="Enforced by the companion extension. Subdomains are covered: play.chess.com is caught by chess.com"
           actions={
-            <button className="btn sm primary" onClick={() => setShowAdd(true)}>
-              + Add website
-            </button>
+            <div className="row" style={{ gap: 8 }}>
+              <input
+                className="input"
+                style={{ width: 180 }}
+                placeholder="Search sites…"
+                value={siteQuery}
+                onChange={(e) => setSiteQuery(e.target.value)}
+              />
+              <button className="btn sm primary" onClick={() => setShowAdd(true)}>
+                + Add website
+              </button>
+            </div>
           }
         >
           <div className="row" style={{ gap: 12, marginBottom: 12 }}>
@@ -214,6 +335,21 @@ export function BlockingPage() {
                   <div className="sub mono">{rule.domain}</div>
                 </div>
                 {rule.category === "adult" && <Chip tone="bad">always on</Chip>}
+                <Chip tone={(hits.get(rule.domain) ?? 0) > 0 ? "good" : ""} className="tiny">
+                  {hits.get(rule.domain) ?? 0} blocked
+                </Chip>
+                <button
+                  className="btn sm ghost"
+                  title={`Test that ${rule.domain} is caught — logs a block now`}
+                  aria-label={`Test blocking ${rule.label}`}
+                  onClick={() => {
+                    actions.testBlock("web", rule.domain);
+                    setJustTested(rule.domain);
+                    window.setTimeout(() => setJustTested(""), 2500);
+                  }}
+                >
+                  {justTested === rule.domain ? "✓ caught" : "Test"}
+                </button>
                 <Segmented<RuleMode>
                   value={rule.mode}
                   onChange={(mode) => actions.setRuleMode(rule.id, "web", mode)}
@@ -403,46 +539,104 @@ export function BlockingPage() {
 
       <Modal
         open={showAdd}
-        onClose={() => setShowAdd(false)}
+        onClose={() => {
+          setShowAdd(false);
+          setAddError("");
+          setAddedNote("");
+        }}
         title={tab === "websites" ? "Add a website to block" : "Add an app to block"}
       >
         {tab === "websites" ? (
           <div className="grid" style={{ gap: 12 }}>
             <label>
-              <div className="stat-label" style={{ marginBottom: 6 }}>Domain</div>
+              <div className="stat-label" style={{ marginBottom: 6 }}>Domain or link</div>
               <input
                 className="input"
-                placeholder="example.com"
+                placeholder="https://www.chess.com/play"
                 value={newSite}
-                onChange={(e) => setNewSite(e.target.value)}
+                autoFocus
+                onChange={(e) => {
+                  setNewSite(e.target.value);
+                  setAddError("");
+                }}
               />
             </label>
-            <div className="small muted">Subdomains are covered automatically.</div>
+            <div className="small muted">
+              Paste a full link — it is reduced to the domain, and subdomains are covered
+              automatically (“chess.com” also blocks play.chess.com).
+            </div>
+            {newSite && !normalizeDomain(newSite) && (
+              <div className="chip bad">That does not look like a domain — try chess.com</div>
+            )}
+            {normalizeDomain(newSite) && suggestedAppsForDomain(newSite).length > 0 && (
+              <div className="grid" style={{ gap: 8 }}>
+                <div className="small">
+                  A website rule cannot stop the desktop app. Also block:
+                </div>
+                <div className="row wrap" style={{ gap: 8 }}>
+                  {suggestedAppsForDomain(newSite).map((process) => (
+                    <button
+                      key={process}
+                      className="btn sm"
+                      title={`Add ${process} to the app blocker`}
+                      onClick={() => {
+                        actions.addCustomApp(process, process.replace(/\.exe$/i, ""));
+                        setAddedNote(`${process} added to the app blocker`);
+                        window.setTimeout(() => setAddedNote(""), 3000);
+                      }}
+                    >
+                      🧩 Block {process}
+                    </button>
+                  ))}
+                </div>
+                {addedNote && <div className="chip good">✓ {addedNote}</div>}
+              </div>
+            )}
+            {addError && <div className="chip bad">{addError}</div>}
           </div>
         ) : (
           <div className="grid" style={{ gap: 12 }}>
             <label>
-              <div className="stat-label" style={{ marginBottom: 6 }}>Process / executable</div>
+              <div className="stat-label" style={{ marginBottom: 6 }}>Process, app or title keyword</div>
               <input
                 className="input"
-                placeholder="notepad.exe"
+                placeholder="Chess.exe · chess.com · Spotify"
                 value={newApp}
-                onChange={(e) => setNewApp(e.target.value)}
+                autoFocus
+                onChange={(e) => {
+                  setNewApp(e.target.value);
+                  setAddError("");
+                }}
               />
             </label>
             <div className="small muted">
-              Tip: press Ctrl+Shift+Esc, open Task Manager → Details to find the exact process name.
+              Partial names work: “chess” catches Chess.exe, chess.com.exe and any window whose title mentions
+              chess. Find exact names in Task Manager → Details.
             </div>
+            {addError && <div className="chip bad">{addError}</div>}
           </div>
         )}
         <div className="row" style={{ marginTop: 18, justifyContent: "flex-end" }}>
           <button
             className="btn primary"
             onClick={() => {
-              if (tab === "websites") actions.addCustomWeb(newSite, "");
-              else actions.addCustomApp(newApp, "");
+              if (tab === "websites") {
+                if (!normalizeDomain(newSite)) {
+                  setAddError("Enter a real domain, e.g. chess.com or lichess.org");
+                  return;
+                }
+                actions.addCustomWeb(newSite, "");
+              } else {
+                if (!newApp.trim()) {
+                  setAddError("Type a process name or a keyword from the window title");
+                  return;
+                }
+                actions.addCustomApp(newApp, "");
+              }
               setNewSite("");
               setNewApp("");
+              setAddError("");
+              setAddedNote("");
               setShowAdd(false);
             }}
           >

@@ -54,28 +54,44 @@ export function domainMatches(rule: string, host: string): boolean {
 export function labelForDomain(domain: string): string {
   const clean = normalizeDomain(domain);
   if (!clean) return domain;
-  return clean
-    .split(".")
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+  const parts = clean.split(".");
+  return parts
+    .map((part, index) =>
+      // keep the TLD lower-case: "chess.com", not "Chess.Com"
+      index === parts.length - 1 ? part : part.charAt(0).toUpperCase() + part.slice(1),
+    )
     .join(".");
 }
 
-/** Guess an icon + category for a hand-typed domain. */
+/**
+ * Guess an icon + category for a hand-typed domain.
+ *
+ * Matching happens on dot separated labels, not raw substrings: "example.com"
+ * must not be read as "mpl" (exa-mpl-e), while "mpl.live" must be.
+ */
+const DOMAIN_HINTS: Array<{ words: string[]; icon: string; category: RuleCategory }> = [
+  { words: ["chess", "chess24", "chesskid", "lichess", "rummy", "rummycircle", "poker", "teenpatti", "dream11", "mpl", "add52", "add52rummy", "solitaire", "cards", "boardgames"], icon: "♟️", category: "games" },
+  { words: ["roblox", "steam", "steampowered", "epicgames", "battlenet", "rockstar", "minecraft", "valorant", "freefire", "bgmi", "friv", "poki", "y8", "crazygames", "miniclip", "games"], icon: "🎮", category: "games" },
+  { words: ["youtube", "netflix", "primevideo", "hotstar", "zee5", "sonyliv", "jiocinema", "twitch", "dailymotion", "vimeo", "hulu", "spotify"], icon: "🎬", category: "video" },
+  { words: ["instagram", "tiktok", "snapchat", "facebook", "twitter", "reddit", "threads", "pinterest", "tumblr", "quora", "linkedin", "mastodon", "discord"], icon: "📱", category: "social" },
+  { words: ["whatsapp", "telegram", "messenger", "signal", "slack", "web"], icon: "💬", category: "chat" },
+  { words: ["porn", "pornhub", "xxx", "xvideos", "xnxx", "xhamster", "redtube", "adult", "sex", "onlyfans"], icon: "🔞", category: "adult" },
+  { words: ["amazon", "flipkart", "myntra", "ajio", "meesho", "ebay", "aliexpress", "croma", "nykaa", "snapdeal", "shopclues"], icon: "🛒", category: "shopping" },
+  { words: ["news", "timesofindia", "hindustantimes", "ndtv", "bbc", "cnn", "thehindu", "inshorts", "reuters"], icon: "📰", category: "news" },
+  { words: ["khanacademy", "coursera", "udemy", "nptel", "byjus", "vedantu", "physicswallah", "wikipedia", "notion", "arxiv", "docs", "classroom"], icon: "📚", category: "study" },
+];
+
 export function guessCategory(domain: string): { icon: string; category: RuleCategory } {
-  const d = normalizeDomain(domain);
-  const HINTS: Array<[RegExp, string, RuleCategory]> = [
-    [/(chess|lichess|chess24|rummy|poker|teenpatti|dream11|mpl|card)/, "♟️", "games"],
-    [/(roblox|steam|epicgames|battlenet|ea\.com|rockstar|minecraft|valorant|freefire|bgmi)/, "🎮", "games"],
-    [/(youtube|netflix|primevideo|hotstar|zee5|sonyliv|jiocinema|twitch|dailymotion|vimeo)/, "🎬", "video"],
-    [/(instagram|tiktok|snapchat|facebook|twitter|x\.com|reddit|threads|pinterest|tumblr|quora|linkedin)/, "📱", "social"],
-    [/(whatsapp|telegram|discord|messenger|signal|slack)/, "💬", "chat"],
-    [/(porn|xxx|adult|sex)/, "🔞", "adult"],
-    [/(amazon|flipkart|myntra|ajio|meesho|ebay|aliexpress|croma|nykaa)/, "🛒", "shopping"],
-    [/(news|timesofindia|hindustantimes|ndtv|bbc|cnn|thehindu|inshorts)/, "📰", "news"],
-    [/(khanacademy|coursera|udemy|nptel|byjus|vedantu|physicswallah|wikipedia|docs\.google|notion|arxiv)/, "📚", "study"],
-  ];
-  for (const [re, icon, category] of HINTS) {
-    if (re.test(d)) return { icon, category };
+  const clean = normalizeDomain(domain);
+  if (!clean) return { icon: "🌐", category: "other" };
+  const labels = clean.split(".");
+  for (const hint of DOMAIN_HINTS) {
+    const hit = hint.words.some((word) =>
+      // long words may appear inside a label ("chesskid" in "chesskidsarena"),
+      // short ones must be a whole label so "mpl" cannot match "example"
+      word.length >= 5 ? labels.some((label) => label.includes(word)) : labels.includes(word),
+    );
+    if (hit) return { icon: hint.icon, category: hint.category };
   }
   return { icon: "🌐", category: "other" };
 }
