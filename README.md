@@ -82,14 +82,17 @@ npm test                # all six suites
 npm run test:engine     # pure logic (analytics, streaks, ratings, rooms)
 npm run test:relay      # raw RFC 6455 protocol test of the relay
 npm run test:extension  # manifest / permission / CSP validation
+npm run test:icons      # icon format + Tauri config validation
+npm run icons           # regenerate icons/icon.icns from the PNG set
 ```
 
 `npm test` bundles the app with esbuild, starts a relay if one is not running,
-then runs **188 checks** across six suites:
+then runs **222 checks** across seven suites:
 
 | Suite | Covers |
 | --- | --- |
 | `engine` (50) | formatting, analytics, streaks, 👍/👎 recommendations, drift helpers, v1→v2 state migration, pruning |
+| `icons` (32) | every bundled icon exists, is 8‑bit RGBA (Tauri rejects RGB at compile time), the ICO/ICNS containers parse, and the Tauri window/capability config is consistent |
 | `extension` (34) | manifest ↔ shipped files, `chrome.*` usage ↔ declared permissions, host permissions ↔ content-script matches, MV3 CSP compliance (no inline scripts, no `javascript:` URLs, no `eval`) |
 | `relay` (11) | raw RFC 6455 handshake, presence, progress fan‑out, chat, reactions, leave |
 | `ui-render` (30) | every one of the 12 routes renders with zero console errors, every control has an accessible name, Free/Pro gating works end to end |
@@ -187,7 +190,7 @@ rooms are reaped.
 
 | Job | Runner | Verifies |
 | --- | --- | --- |
-| **web** | ubuntu | typecheck, all six test suites, production build, uploads `dist` |
+| **web** | ubuntu | typecheck, all seven test suites, production build, uploads `dist` |
 | **rust** | windows / ubuntu / macos | `cargo check`, `cargo test`, plus advisory `fmt` + `clippy` |
 | **extension** | ubuntu | manifest/permission/CSP validation, syntax check, packaged `regain-extension.zip` |
 | **desktop** | windows | full `tauri build` → uploads the `.msi` / `.exe` installers |
@@ -197,12 +200,18 @@ environment without a Rust toolchain: CI is what actually compiles the core and
 produces installers. Style gates (`cargo fmt`, `cargo clippy`) run advisory so a
 formatting nit cannot hide a real regression.
 
+When a Rust job fails it publishes its first compiler error as a commit status
+and the log tail as a commit comment, so a failure is diagnosable from the API
+or the PR timeline without downloading the Actions log archive. That channel is
+how the RGBA icon bug (`icons/32x32.png is not RGBA`, which only broke Linux and
+macOS builds) was found and fixed.
+
 ## Verification status
 
 Verified in this workspace:
 
 * `npm run build` — TypeScript clean, 55 modules, 289 kB JS (88 kB gzip).
-* `npm test` — engine 50, extension 34, relay 11, ui‑render 30, ui‑resilience 8, ui‑flow 35 checks pass.
+* `npm test` — engine 50, extension 34, icons 32, relay 11, ui‑render 30, ui‑resilience 8, ui‑flow 35 checks pass.
 * Relay verified end‑to‑end with two independent clients (presence, progress,
   chat, reactions, leave).
 * Live Vite preview serves every route; the dev server binds `0.0.0.0` and
@@ -213,8 +222,9 @@ Verified in this workspace:
 
 Not verified here (no Rust toolchain and no Windows in this environment):
 
-* `cargo build` / `npm run tauri build` — the Rust core and `tauri.conf.json`
-  are written against Tauri 2 APIs but have not been compiled.
+* Local `cargo build` — no Rust toolchain in this environment. CI covers it:
+  `cargo check`/`cargo test` now pass on Windows, Linux and macOS, and the
+  Windows job produces `.msi`/`.exe` installers via `tauri build`.
 * Native foreground‑window detection and minimise‑on‑sight blocking.
 * The unpacked Chrome extension inside a real browser (its manifest, permissions
   and MV3 compliance are validated statically in CI instead).
@@ -238,8 +248,9 @@ src/
   styles/global.css                        design system
 regain-extension/                          Chrome/Edge MV3 companion
 server/room-server.mjs                     zero-dependency WebSocket relay
-tests/                                     engine, extension, relay, ui-render,
-                                           ui-resilience, ui-flow
+tests/                                     engine, extension, icons, relay,
+                                           ui-render, ui-resilience, ui-flow
+scripts/make-icns.mjs                      macOS .icns container builder
 .github/workflows/ci.yml                   web / rust / extension / desktop jobs
 ```
 

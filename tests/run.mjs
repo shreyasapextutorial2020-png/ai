@@ -92,6 +92,7 @@ if (!(await relayHealthy())) {
 const suites = [
   { name: "engine", file: "tests/engine.test.mjs", env: { REGAIN_LIB_DIR: libDir } },
   { name: "extension", file: "tests/extension.test.mjs", env: {} },
+  { name: "icons", file: "tests/icons.test.mjs", env: {} },
   { name: "relay", file: "tests/relay.test.mjs", env: { REGAIN_RELAY_PORT: String(relayPort) } },
   { name: "ui-render", file: "tests/ui-render.test.mjs", env: { REGAIN_APP_BUNDLE: appBundle } },
   { name: "ui-resilience", file: "tests/ui-resilience.test.mjs", env: { REGAIN_APP_BUNDLE: appBundle } },

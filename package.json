@@ -14,7 +14,9 @@
     "test:engine": "node tests/engine.test.mjs",
     "test:relay": "node tests/relay.test.mjs",
     "relay": "node server/room-server.mjs",
-    "test:extension": "node tests/extension.test.mjs"
+    "test:extension": "node tests/extension.test.mjs",
+    "test:icons": "node tests/icons.test.mjs",
+    "icons": "node scripts/make-icns.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.2.0",
