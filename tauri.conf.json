@@ -1,36 +1,41 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "regain-pc",
-  "version": "0.1.0",
+  "productName": "Regain",
+  "version": "1.0.0",
   "identifier": "com.rshre.regain-pc",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
     "beforeBuildCommand": "npm run build",
-    "frontendDist": "../dist"
+    "frontendDist": "dist"
   },
   "app": {
+    "withGlobalTauri": false,
     "windows": [
-  {
-    "title": "Regain PC",
-    "label": "main",
-    "width": 860,
-    "height": 700,
-    "resizable": true,
-    "fullscreen": false
-  },
-  {
-    "title": "Focus Guard",
-    "label": "blocker",
-    "url": "/#blocker",
-    "fullscreen": true,
-    "alwaysOnTop": true,
-    "decorations": false,
-    "transparent": true,
-    "visible": false,
-    "skipTaskbar": true
-  }
-],
+      {
+        "title": "Regain — Focus & Digital Wellbeing",
+        "label": "main",
+        "width": 1240,
+        "height": 820,
+        "minWidth": 960,
+        "minHeight": 620,
+        "resizable": true,
+        "fullscreen": false,
+        "center": true
+      },
+      {
+        "title": "Focus Guard",
+        "label": "blocker",
+        "url": "/#blocker",
+        "fullscreen": true,
+        "alwaysOnTop": true,
+        "decorations": false,
+        "transparent": false,
+        "visible": false,
+        "skipTaskbar": true,
+        "focus": true
+      }
+    ],
     "security": {
       "csp": null
     }
@@ -38,12 +43,20 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "category": "Productivity",
+    "shortDescription": "Focus timer, app blocker and study rooms",
+    "longDescription": "Regain is a focus and digital-wellbeing app: strict app blocking, Pomodoro timers, multiplayer study rooms, screen-time tracking and Reels/Shorts blocking that still allows educational content.",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
-      "icons/icon.icns",
-      "icons/icon.ico"
-    ]
+      "icons/icon.ico",
+      "icons/icon.png"
+    ],
+    "windows": {
+      "wix": {
+        "language": "en-US"
+      }
+    }
   }
 }

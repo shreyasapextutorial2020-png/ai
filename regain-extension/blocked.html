@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Blocked by Regain</title>
+    <style>
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        text-align: center;
+        background: radial-gradient(900px 600px at 50% 0%, rgba(124, 92, 255, 0.28), transparent 60%), #08080f;
+        color: #eceaff;
+        font-family: Inter, system-ui, sans-serif;
+        padding: 24px;
+      }
+      h1 { font-size: 26px; margin: 12px 0 6px; }
+      p { opacity: 0.72; max-width: 520px; }
+      a { color: #7c5cff; font-weight: 600; text-decoration: none; }
+      .card {
+        border: 1px solid rgba(255,255,255,.12);
+        background: rgba(255,255,255,.04);
+        border-radius: 20px;
+        padding: 28px 32px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <div style="font-size: 56px">🛡️</div>
+      <h1>Blocked by Regain</h1>
+      <p id="msg">This site is on your focus blocklist.</p>
+      <p><a href="javascript:window.close()">Close this tab</a></p>
+    </div>
+    <script>
+      const params = new URLSearchParams(location.search);
+      const domain = params.get("domain");
+      if (domain) {
+        document.getElementById("msg").textContent = domain + " is on your focus blocklist.";
+      }
+    </script>
+  </body>
+</html>

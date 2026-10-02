@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Regain</title>
+    <style>
+      body {
+        width: 250px;
+        margin: 0;
+        padding: 16px;
+        font-family: Inter, system-ui, sans-serif;
+        background: #101024;
+        color: #eceaff;
+      }
+      h1 { font-size: 15px; margin: 0 0 10px; }
+      .state { font-size: 12.5px; opacity: .8; margin-bottom: 10px; }
+      .pill {
+        display: inline-block; padding: 3px 9px; border-radius: 999px;
+        font-size: 11px; font-weight: 700; margin-bottom: 8px;
+      }
+      .on { background: rgba(47,191,143,.18); color: #2fbf8f; }
+      .off { background: rgba(251,113,133,.16); color: #fb7185; }
+      ul { padding-left: 16px; margin: 8px 0; font-size: 12px; opacity: .8; }
+    </style>
+  </head>
+  <body>
+    <h1>Regain Focus Companion</h1>
+    <div id="pill" class="pill off">checking…</div>
+    <div class="state" id="detail">Reading state from the desktop app…</div>
+    <ul>
+      <li>Reels &amp; Shorts blocked while focusing</li>
+      <li>Distracting domains redirected</li>
+      <li>YouTube Study Mode channel allow-list</li>
+    </ul>
+    <div class="state" id="timer"></div>
+    <script src="popup.js"></script>
+  </body>
+</html>

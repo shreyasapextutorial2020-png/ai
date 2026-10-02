@@ -1,9 +1,30 @@
-/* Hide Reels tab in Instagram sidebar navigation */
-a[href*="/reels/"] {
+/* Regain — Instagram Reels shield (active only during focus sessions) */
+
+html[data-regain-reels="blocked"] a[href*="/reels/"],
+html[data-regain-reels="blocked"] a[href^="/reels"],
+html[data-regain-reels="blocked"] svg[aria-label="Reels"],
+html[data-regain-reels="blocked"] div:has(> article) span:has(svg[aria-label="Reels"]) {
   display: none !important;
 }
 
-/* Hide Reels trays inside the home feed */
-div:has(> article) span:has(svg[aria-label="Reels"]) {
+/* Hide the explore grid — it is the main route back into short-form scrolling */
+html[data-regain-reels="blocked"] a[href^="/explore/"],
+html[data-regain-reels="blocked"] a[href^="/reels"] {
   display: none !important;
+}
+
+/* Gentle nudge bar */
+html[data-regain-focus="true"] body::before {
+  content: "🛡️ Regain focus session active — Reels and Explore are blocked.";
+  display: block;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 99999;
+  padding: 7px 12px;
+  font: 600 12px/1.4 Inter, system-ui, sans-serif;
+  text-align: center;
+  color: #eaeaff;
+  background: linear-gradient(90deg, #7c5cff, #38bdf8);
 }
