@@ -53,6 +53,7 @@ import {
 } from "../lib/utils";
 import type {
   ActiveSession,
+  Rating,
   AppRule,
   FocusBlock,
   PersistedState,
@@ -124,6 +125,7 @@ interface StoreValue {
     stopSession: (reason?: "user" | "gave-up") => void;
     abandonStrictSession: () => void;
     rateSession: (id: string, rating: SessionLog["rating"]) => void;
+    rateApp: (rating: Rating) => void;
     deleteSession: (id: string) => void;
     toggleAppRule: (id: string) => void;
     toggleWebRule: (id: string) => void;
@@ -489,6 +491,13 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         void notify("Break finished ⏰", "Back to focus — you've got this.");
       }
     }
+      // One-time nudge: after three finished sessions, ask for an overall rating.
+      // It only fires when the user has not rated the app yet.
+      const finished = s.sessions.filter((session) => session.completed).length;
+      if (finished === 3 && !s.settings.appRating && !s.reminders.some((r) => r.kind === "rating")) {
+        pushReminder("rating", "How is Regain working for you?", "Tap 👍 or 👎 on Insights to tune your sessions.");
+      }
+
   }, []);
 
   useEffect(() => {
@@ -790,6 +799,18 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   const abandonStrictSession = useCallback(() => {
     completeSession("emergency");
   }, [completeSession]);
+
+  const rateApp = useCallback((rating: Rating) => {
+    setState((prev) => ({
+      ...prev,
+      settings: {
+        ...prev.settings,
+        // tapping the highlighted button again clears the rating
+        appRating: prev.settings.appRating === rating ? null : rating,
+        appRatingAt: prev.settings.appRating === rating ? null : Date.now(),
+      },
+    }));
+  }, []);
 
   const rateSession = useCallback((id: string, rating: SessionLog["rating"]) => {
     setState((prev) => ({
@@ -1223,6 +1244,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       stopSession,
       abandonStrictSession,
       rateSession,
+      rateApp,
       deleteSession,
       toggleAppRule,
       toggleWebRule,

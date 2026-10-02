@@ -267,6 +267,30 @@ try {
   );
   report.check("the chess desktop app is caught by the same rule", chessAppBlocked, "no chess.exe block logged");
 
+  /* ------------------- 8b. app-level Like / Dislike --------------------- */
+  await env.navTo(7); // Insights
+  const likeApp = env.window.document.querySelector('button[aria-label="Like Regain"]');
+  const dislikeApp = env.window.document.querySelector('button[aria-label="Dislike Regain"]');
+  report.check("Insights exposes Like and Dislike for the app itself", Boolean(likeApp && dislikeApp));
+  await env.click(likeApp, 300);
+  const likedApp = await waitFor(() => env.storedState().settings?.appRating === "like", 5000);
+  report.check("liking the app persists in settings", likedApp, JSON.stringify(env.storedState().settings?.appRating));
+  report.check("the card acknowledges the like", /glad it is helping|Thanks/.test(env.contentText()));
+  await env.click(env.window.document.querySelector('button[aria-label="Dislike Regain"]'), 300);
+  const dislikedApp = await waitFor(() => env.storedState().settings?.appRating === "dislike", 5000);
+  report.check("disliking replaces the like", dislikedApp, JSON.stringify(env.storedState().settings?.appRating));
+  report.check(
+    "a dislike offers concrete fixes instead of a dead end",
+    /Block the sites that keep pulling you away/.test(env.contentText()),
+  );
+  // tapping the active button again clears the rating
+  await env.click(env.window.document.querySelector('button[aria-label="Dislike Regain"]'), 300);
+  const cleared = await waitFor(() => env.storedState().settings?.appRating === null, 5000);
+  report.check("tapping the active rating again clears it", cleared, JSON.stringify(env.storedState().settings?.appRating));
+  report.check("no console errors during rating", env.errors.length === 0, env.errors[0]);
+  // back to the timer page: the shortcut checks below assume a session control is visible
+  await env.navTo(0, 300);
+
   /* ------------------------- 9. keyboard shortcuts ----------------------- */
   env.window.__REGAIN_SIM_WINDOW__ = undefined;
   const key = (k) => env.window.document.dispatchEvent(new env.window.KeyboardEvent("keydown", { key: k, bubbles: true }));

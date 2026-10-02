@@ -153,7 +153,7 @@ export interface RoomMessage {
 
 export interface Reminder {
   id: string;
-  kind: "drift" | "planner" | "goal";
+  kind: "drift" | "planner" | "goal" | "rating";
   title: string;
   body: string;
   at: number;
@@ -185,6 +185,9 @@ export interface Settings {
   /** additional sound ids layered under the primary track */
   musicLayers: string[];
   musicLayerVolume: number;
+  /** overall thumbs-up/down for the app itself (separate from session ratings) */
+  appRating: Rating | null;
+  appRatingAt: number | null;
   wallpaper: string;
   roomServerUrl: string;
   nickname: string;

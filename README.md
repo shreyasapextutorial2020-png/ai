@@ -30,6 +30,7 @@ browser‑preview mode so the whole product runs without a desktop build.
 | **Focus Guard reminders** | Pro nudge when you drift onto an *unblocked* distracting app or site mid‑session (blocked apps are intercepted as usual, so Study Mode browsers and notes are untouched) |
 | **Planner reminders** | A scheduled focus block raises a notification the moment it starts |
 | **Keyboard shortcuts** | `Space` quick session / pause / resume, `M` soundscape, `Esc` dismiss the Focus Guard, `?` shortcut list |
+| **Like / Dislike** | Per‑session 👍/👎 on every finished session (drives block length, mode and time‑of‑day suggestions) plus an app‑level 👍/👎 on Insights; a dislike swaps the pitch for concrete fixes, and a one‑time nudge asks after your third finished session |
 | **Progress** | Streaks, 10‑week consistency heatmap, subject balance, trend vs previous week, rating‑driven session suggestions |
 | **Pro** | Free vs Pro feature matrix, plan picker, demo activation. Reels/Shorts shield and YouTube Study Mode are Pro‑gated in the UI (with a one‑click upgrade path); the app/website blockers, adult‑site blocking, timers, screen time, planner and rooms stay free |
 
@@ -88,7 +89,7 @@ npm run icons           # regenerate icons/icon.icns from the PNG set
 ```
 
 `npm test` bundles the app with esbuild, starts a relay if one is not running,
-then runs **276 checks** across seven suites:
+then runs **283 checks** across seven suites:
 
 | Suite | Covers |
 | --- | --- |
@@ -98,7 +99,7 @@ then runs **276 checks** across seven suites:
 | `relay` (11) | raw RFC 6455 handshake, presence, progress fan‑out, chat, reactions, leave |
 | `ui-render` (30) | every one of the 12 routes renders with zero console errors, every control has an accessible name, Free/Pro gating works end to end |
 | `ui-resilience` (8) | **no relay running** → the app degrades to local mode instead of crashing |
-| `ui-flow` (42) | session completion → logging → streak, blocking presets + per-rule Test button, chess.com and Chess.exe interception, layered audio, planner + drift reminders, keyboard shortcuts, and two clients sharing one room through the real relay |
+| `ui-flow` (49) | session completion → logging → streak, blocking presets + per-rule Test button, chess.com and Chess.exe interception, layered audio, app-level 👍/👎 rating, planner + drift reminders, keyboard shortcuts, and two clients sharing one room through the real relay |
 
 ---
 
@@ -212,7 +213,7 @@ macOS builds) was found and fixed.
 Verified in this workspace:
 
 * `npm run build` — TypeScript clean, 322 kB JS (98 kB gzip) plus 15 kB CSS.
-* `npm test` — engine 103, extension 50, icons 32, relay 11, ui‑render 30, ui‑resilience 8, ui‑flow 42 checks pass.
+* `npm test` — engine 103, extension 50, icons 32, relay 11, ui‑render 30, ui‑resilience 8, ui‑flow 49 checks pass.
 * Relay verified end‑to‑end with two independent clients (presence, progress,
   chat, reactions, leave).
 * Live Vite preview serves every route; the dev server binds `0.0.0.0` and

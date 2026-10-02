@@ -12,6 +12,7 @@ import {
   trend,
 } from "../lib/utils";
 import { recommendSession } from "../lib/recommend";
+import { navigateTo } from "../lib/nav";
 import { CATEGORY_COLOURS } from "../lib/defaults";
 
 export function InsightsPage() {
@@ -190,6 +191,72 @@ export function InsightsPage() {
             </div>
           </div>
         </div>
+      </Card>
+
+      <Card
+        head="How is Regain working for you?"
+        hint="Your overall 👍 / 👎, separate from individual session ratings"
+        actions={
+          <div className="row" style={{ gap: 8 }}>
+            <button
+              className={`btn sm ${state.settings.appRating === "like" ? "primary" : ""}`}
+              aria-pressed={state.settings.appRating === "like"}
+              aria-label="Like Regain"
+              title="Regain is working well for me"
+              onClick={() => actions.rateApp("like")}
+            >
+              👍 Like
+            </button>
+            <button
+              className={`btn sm ${state.settings.appRating === "dislike" ? "primary" : ""}`}
+              aria-pressed={state.settings.appRating === "dislike"}
+              aria-label="Dislike Regain"
+              title="Regain is not working well for me yet"
+              onClick={() => actions.rateApp("dislike")}
+            >
+              👎 Dislike
+            </button>
+          </div>
+        }
+      >
+        {state.settings.appRating === "like" && (
+          <div className="small muted" style={{ lineHeight: 1.7 }}>
+            Thanks — glad it is helping. Sessions you rate with 👍 keep tuning the suggestions below, and the
+            Focus Guard gets quieter as your streak grows.
+          </div>
+        )}
+        {state.settings.appRating === "dislike" && (
+          <>
+            <div className="small muted" style={{ lineHeight: 1.7 }}>
+              Noted — no hard feelings. Here are the three changes that help most people who bounce off a focus
+              app, in order:
+            </div>
+            <div className="row wrap" style={{ gap: 8, marginTop: 12 }}>
+              <button className="btn sm" onClick={() => navigateTo("blocking")}>
+                🚫 Block the sites that keep pulling you away
+              </button>
+              <button className="btn sm" onClick={() => navigateTo("strict")}>
+                🔒 Start at Strict level 1 instead of 3
+              </button>
+              <button className="btn sm" onClick={() => navigateTo("music")}>
+                🎧 Play Rain or Brown noise while you work
+              </button>
+              <button className="btn sm" onClick={() => navigateTo("planner")}>
+                🗓️ Schedule one block instead of a daily goal
+              </button>
+            </div>
+            <div className="small muted" style={{ marginTop: 12 }}>
+              You can also send this back by tapping 👎 again to clear it, then rating a session honestly — the
+              suggestion engine only learns from what you actually finish.
+            </div>
+          </>
+        )}
+        {!state.settings.appRating && (
+          <div className="small muted" style={{ lineHeight: 1.7 }}>
+            Free text export and telemetry do not exist here — this rating stays in your local state and only
+            changes what Regain suggests next.
+          </div>
+        )}
       </Card>
     </div>
   );

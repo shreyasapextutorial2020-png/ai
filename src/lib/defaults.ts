@@ -10,7 +10,7 @@ import type {
 } from "./types";
 
 export const STORAGE_KEY = "regain.pc.state.v1";
-export const STATE_VERSION = 3;
+export const STATE_VERSION = 4;
 
 export const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 
@@ -43,6 +43,8 @@ export const DEFAULT_SETTINGS: Settings = {
   /** extra layers mixed under the primary track (sound ids) */
   musicLayers: [],
   musicLayerVolume: 0.5,
+  appRating: null,
+  appRatingAt: null,
   wallpaper: "aurora",
   roomServerUrl: "",
   nickname: "You",
