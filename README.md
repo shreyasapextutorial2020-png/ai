@@ -210,7 +210,7 @@ macOS builds) was found and fixed.
 
 Verified in this workspace:
 
-* `npm run build` — TypeScript clean, 55 modules, 289 kB JS (88 kB gzip).
+* `npm run build` — TypeScript clean, 55 modules, 298 kB JS (91 kB gzip).
 * `npm test` — engine 50, extension 34, icons 32, relay 11, ui‑render 30, ui‑resilience 8, ui‑flow 35 checks pass.
 * Relay verified end‑to‑end with two independent clients (presence, progress,
   chat, reactions, leave).
@@ -220,13 +220,23 @@ Verified in this workspace:
   and falls back to local mode (regression-tested — this used to recurse until
   the stack blew up).
 
-Not verified here (no Rust toolchain and no Windows in this environment):
+Verified by CI (run `36984070173`, all six jobs green):
 
-* Local `cargo build` — no Rust toolchain in this environment. CI covers it:
-  Windows `cargo check`/`cargo test` pass and the desktop job produces
-  `.msi`/`.exe` installers via `tauri build`. The Linux and macOS jobs drive
-  `tauri::generate_context!` harder and exposed an RGB icon bug; the icons are
-  now RGBA and the `icons` suite guards it, awaiting the next CI run.
+* `Rust core` — `cargo check --all-targets` and `cargo test` pass on
+  **ubuntu-latest, macos-latest and windows-latest**.
+* **Desktop bundle (Windows)** — a real `tauri build` produces the
+  `regain-windows-installers` artifact (`.msi` + NSIS `.exe`).
+* `Web app, engine & tests`, `Extension packaging` — build, all seven suites
+  and the MV3 bundle.
+
+That run also fixed a genuine cross‑platform bug: `tauri::generate_context!`
+panics on an RGB PNG icon, which broke Linux and macOS while Windows compiled
+fine. All icons are RGBA now, `icons/icon.icns` is a real ICNS container, and
+the `icons` suite guards the formats.
+
+Not verified here (no Rust toolchain, no Windows, no real browser in this
+environment):
+
 * Native foreground‑window detection and minimise‑on‑sight blocking.
 * The unpacked Chrome extension inside a real browser (its manifest, permissions
   and MV3 compliance are validated statically in CI instead).
