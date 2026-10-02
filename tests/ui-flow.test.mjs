@@ -139,17 +139,13 @@ try {
   report.check("selecting a sound marks it active", Boolean(rainCard?.classList.contains("active")));
   report.check("the audio engine runs without errors", env.errors.length === 0, env.errors[0]);
 
-  // layering: rain is playing, add brown noise underneath it
-  const layerButton = env.window.document.querySelector('button[aria-label="Add Brown noise layer"]');
-  await env.click(layerButton, 300);
-  const layered = await waitFor(() => (env.storedState().settings?.musicLayers ?? []).includes("brown"), 5000);
-  const layers = env.storedState().settings?.musicLayers ?? [];
-  report.check(
-    "a second soundscape layers onto the mix",
-    layered,
-    `found=${Boolean(layerButton)} layers=${JSON.stringify(layers)} playing=${JSON.stringify(env.contentText().match(/Now playing/)?.length)}`,
-  );
-  report.check("the live mix shows both layers", /Live mix/.test(env.contentHtml()));
+  // no mixer any more: playing another sound replaces the current one
+  report.check("the layering UI is gone", !env.contentHtml().includes("+ Layer"));
+  const brownCard = soundCards.find((card) => /Brown noise/.test(card.textContent));
+  await env.click(brownCard, 300);
+  const switched = await waitFor(() => /Brown noise/.test(env.contentText()), 5000);
+  report.check("picking another sound switches to it", switched);
+  report.check("no error dialog about layers", !/Live mix/.test(env.contentHtml()));
 
   /* ---------------------- 5. multiplayer study rooms ------------------------ */
   await env.navTo(8);

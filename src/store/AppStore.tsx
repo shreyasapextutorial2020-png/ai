@@ -8,8 +8,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { SOUNDS, todayKey, uid } from "../lib/defaults";
-import { ambient, type SoundKind } from "../lib/audio";
+import { todayKey, uid } from "../lib/defaults";
 import {
   domainMatches,
   findMatchingRule,
@@ -134,7 +133,6 @@ interface StoreValue {
     addCustomWeb: (domain: string, label: string) => boolean;
     setCategoryEnabled: (category: string, enabled: boolean, mode?: RuleMode) => void;
     testBlock: (kind: "app" | "web", pattern: string) => void;
-    playSoundMix: (primary: string, layers: string[]) => void;
     removeCustomRule: (id: string) => void;
     toggleChannel: (id: string) => void;
     addChannel: (handle: string) => void;
@@ -940,22 +938,6 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     [registerBlocked],
   );
 
-  /** Sound layers for the mixer: the primary track plus any extras. */
-  const playSoundMix = useCallback((primary: string, layers: string[]) => {
-    const s = stateRef.current;
-    const toLayer = (id: string) => {
-      const def = SOUNDS.find((x) => x.id === id);
-      return def ? { kind: def.kind } : null;
-    };
-    const head = toLayer(primary);
-    if (!head) return;
-    const extras = layers
-      .filter((id) => id && id !== primary)
-      .map(toLayer)
-      .filter((x): x is { kind: SoundKind } => x !== null);
-    ambient.playMix([head, ...extras], s.settings.musicVolume);
-  }, []);
-
   const removeCustomRule = useCallback((id: string) => {
     setState((prev) => ({
       ...prev,
@@ -1253,7 +1235,6 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       addCustomWeb,
       setCategoryEnabled,
       testBlock,
-      playSoundMix,
       removeCustomRule,
       toggleChannel,
       addChannel,

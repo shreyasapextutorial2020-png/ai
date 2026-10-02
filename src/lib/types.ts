@@ -182,9 +182,6 @@ export interface Settings {
   tickSound: boolean;
   musicVolume: number;
   musicTrack: string;
-  /** additional sound ids layered under the primary track */
-  musicLayers: string[];
-  musicLayerVolume: number;
   /** overall thumbs-up/down for the app itself (separate from session ratings) */
   appRating: Rating | null;
   appRatingAt: number | null;

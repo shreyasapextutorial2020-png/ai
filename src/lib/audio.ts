@@ -43,12 +43,6 @@ export type SoundKind =
   | "alpha"
   | "theta";
 
-export interface Layer {
-  kind: SoundKind;
-  /** 0–1, relative to the master volume */
-  volume?: number;
-}
-
 /* ------------------------------------------------------------------ */
 /* helpers                                                             */
 /* ------------------------------------------------------------------ */
@@ -246,31 +240,6 @@ export class AmbientEngine {
     this.nodes.push(g);
   }
 
-  /** Sustained chord pad (lo-fi family, ambient, chillwave). */
-  private pad(out: AudioNode, freqs: number[], dur: number, gain = 0.09, type: OscillatorType = "triangle") {
-    const ctx = this.ensureCtx();
-    const t = ctx.currentTime;
-    const lp = ctx.createBiquadFilter();
-    lp.type = "lowpass";
-    lp.frequency.value = 2200;
-    lp.connect(out);
-    this.nodes.push(lp);
-    for (const f of freqs) {
-      const osc = ctx.createOscillator();
-      osc.type = type;
-      osc.frequency.value = f;
-      const g = ctx.createGain();
-      g.gain.setValueAtTime(0, t);
-      g.gain.linearRampToValueAtTime(gain, t + Math.min(1.2, dur * 0.3));
-      g.gain.linearRampToValueAtTime(0, t + dur);
-      osc.connect(g);
-      g.connect(lp);
-      osc.start(t);
-      osc.stop(t + dur + 0.1);
-      this.nodes.push(g);
-    }
-  }
-
   /** Kick / snare / hat for the lo-fi beats voice. */
   private drum(out: AudioNode, kind: "kick" | "snare" | "hat", gain = 0.3, delay = 0) {
     const ctx = this.ensureCtx();
@@ -319,6 +288,74 @@ export class AmbientEngine {
   /** Random value in a range. */
   private rnd(min: number, max: number) {
     return min + Math.random() * (max - min);
+  }
+
+  /**
+   * Small feedback-delay bus used by the music voices. Gives the generated
+   * tracks a sense of room without a single sample of noise underneath them.
+   */
+  private space(out: AudioNode, amount = 0.3) {
+    const ctx = this.ensureCtx();
+    const bus = ctx.createGain();
+    bus.gain.value = 1;
+    bus.connect(out);
+    const send = ctx.createGain();
+    send.gain.value = amount;
+    const delay = ctx.createDelay(1.5);
+    delay.delayTime.value = 0.29;
+    const feedback = ctx.createGain();
+    feedback.gain.value = 0.32;
+    const damp = ctx.createBiquadFilter();
+    damp.type = "lowpass";
+    damp.frequency.value = 2200;
+    send.connect(delay);
+    delay.connect(damp);
+    damp.connect(feedback);
+    feedback.connect(delay);
+    damp.connect(bus);
+    this.nodes.push(bus, send, delay, feedback, damp);
+    return { bus, send };
+  }
+
+  /** Scheduled note with independent attack/release, used by the composer. */
+  private voice_note(
+    out: AudioNode,
+    freq: number,
+    at: number,
+    dur: number,
+    gain = 0.12,
+    type: OscillatorType = "triangle",
+    detune = 0,
+  ) {
+    const ctx = this.ensureCtx();
+    const t = ctx.currentTime + at;
+    const osc = ctx.createOscillator();
+    osc.type = type;
+    osc.frequency.value = freq;
+    if (detune) osc.detune.value = detune;
+    const g = ctx.createGain();
+    const attack = Math.min(0.06, dur * 0.2);
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(gain, t + attack);
+    g.gain.setValueAtTime(gain, t + Math.max(attack, dur * 0.5));
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    osc.connect(g);
+    g.connect(out);
+    osc.start(t);
+    osc.stop(t + dur + 0.05);
+    this.nodes.push(g);
+  }
+
+  /** Chord: the notes sound together and ring out. */
+  private chord(out: AudioNode, freqs: number[], at: number, dur: number, gain = 0.07) {
+    freqs.forEach((f, i) =>
+      this.voice_note(out, f, at + i * 0.012, dur, gain, "triangle", i % 2 ? 4 : -4),
+    );
+  }
+
+  /** Bass line note — a sine an octave or two down. */
+  private bass(out: AudioNode, freq: number, at: number, dur: number, gain = 0.13) {
+    this.voice_note(out, freq, at, dur, gain, "sine");
   }
 
   /* --------------------------- voices --------------------------- */
@@ -488,181 +525,276 @@ export class AmbientEngine {
       }
 
       /* -------------------------- music -------------------------- */
+      /* Original compositions generated from chord tables and scales.
+         Deliberately no noise beds, no crackle, no hiss — just the music. */
+
       case "lofi": {
-        this.noise(out, "pink", 0.04, { type: "highpass", freq: 3200 });
-        const roots = ["A2", "F2", "G2", "D2"];
-        let step = 0;
-        const chord = () => {
-          const root = hz(roots[step % roots.length]);
-          step += 1;
-          this.pad(out, [root, root * 1.19, root * 1.5, root * 2], 6.4, 0.075);
-          this.note(out, root / 2, 3.2, 0.09, "sine"); // bass
+        const { bus, send } = this.space(out, 0.34);
+        // Fmaj7 – Am7 – Dm7 – G7, four bars, keys-led and unhurried
+        const progression = [
+          ["F3", "A3", "C4", "E4"],
+          ["A3", "C4", "E4", "G4"],
+          ["D3", "F3", "A3", "C4"],
+          ["G3", "B3", "D4", "F4"],
+        ].map((chord) => chord.map(hz));
+        const barSeconds = 5.2;
+        let bar = 0;
+        const playBar = () => {
+          const notes = progression[bar % progression.length];
+          const root = notes[0];
+          bar += 1;
+          this.chord(bus, notes, 0, barSeconds * 0.96, 0.055);
+          this.bass(bus, root / 2, 0.02, barSeconds * 0.5, 0.12);
+          this.bass(bus, root / 2 * 1.5, barSeconds * 0.5, barSeconds * 0.42, 0.1);
+          // sparse melody on top, one note per beat at most
+          for (let i = 0; i < 4; i++) {
+            if (Math.random() > 0.45) continue;
+            const degree = SCALES.majorPentatonic[Math.floor(Math.random() * 5)];
+            const freq = root * 2 * Math.pow(2, degree / 12);
+            const at = i * (barSeconds / 4) + 0.05;
+            this.voice_note(bus, freq, at, 1.4, 0.05, "sine");
+            this.voice_note(send, freq * 2, at + 0.01, 1.8, 0.02, "sine");
+          }
         };
-        chord();
-        this.every(6200, chord);
+        playBar();
+        this.every(barSeconds * 1000, playBar);
         break;
       }
+
       case "lofiPiano": {
-        this.noise(out, "pink", 0.035, { type: "highpass", freq: 3600 });
-        const roots = ["C3", "A2", "F2", "G2"];
-        const scale = SCALES.majorPentatonic;
+        const { bus, send } = this.space(out, 0.3);
+        // Cmaj7 – Em7 – Fmaj7 – Gadd9, arpeggiated like a practice loop
+        const progression = [
+          ["C3", "E3", "G3", "B3"],
+          ["E3", "G3", "B3", "D4"],
+          ["F3", "A3", "C4", "E4"],
+          ["G3", "B3", "D4", "A4"],
+        ].map((c) => c.map(hz));
+        const barSeconds = 4.4;
         let bar = 0;
-        const phrase = () => {
-          const root = hz(roots[bar % roots.length]);
+        const playBar = () => {
+          const notes = progression[bar % progression.length];
           bar += 1;
-          this.pad(out, [root / 2, root / 2 * 1.5], 5.6, 0.05);
-          const notes = 3 + Math.floor(Math.random() * 3);
-          let t = 0;
-          for (let i = 0; i < notes; i++) {
-            const degree = scale[Math.floor(Math.random() * scale.length)];
-            const octave = Math.random() > 0.6 ? 2 : 1;
-            const freq = root * Math.pow(2, degree / 12) * octave;
-            this.note(out, freq, this.rnd(0.5, 1.1), 0.085, "triangle", t, 0.999);
-            t += this.rnd(0.28, 0.62);
+          this.bass(bus, notes[0] / 2, 0, 2.1, 0.11);
+          // arpeggio, humanised timing and dynamics
+          const order = [...notes, notes[2], notes[1], notes[3]];
+          order.forEach((freq, i) => {
+            const at = i * (barSeconds / order.length) + Math.random() * 0.03;
+            this.voice_note(bus, freq, at, 1.5, 0.085 - i * 0.004, "triangle");
+            this.voice_note(send, freq * 2, at + 0.02, 2.2, 0.03, "sine");
+          });
+          // melody note or two above the arpeggio
+          if (Math.random() > 0.35) {
+            const degree = SCALES.majorPentatonic[Math.floor(Math.random() * 5)];
+            const at = 1.2 + Math.random() * 1.4;
+            this.voice_note(bus, notes[0] * 2 * Math.pow(2, degree / 12), at, 1.8, 0.055, "sine");
           }
         };
-        phrase();
-        this.every(5200, phrase);
+        playBar();
+        this.every(barSeconds * 1000, playBar);
         break;
       }
+
       case "lofiJazz": {
-        this.noise(out, "pink", 0.04, { type: "highpass", freq: 3400 });
-        const roots = ["D2", "G2", "C2", "A2"];
+        const { bus, send } = this.space(out, 0.28);
+        // ii – V – I in C, walking bass and brushed hits
+        const progression = [
+          ["D3", "F3", "A3", "C4"],
+          ["G3", "B3", "D4", "F4"],
+          ["C3", "E3", "G3", "B3"],
+          ["A3", "C4", "E4", "G4"],
+        ].map((c) => c.map(hz));
+        const barSeconds = 3.6;
         let bar = 0;
-        const phrase = () => {
-          const root = hz(roots[bar % roots.length]);
+        const playBar = () => {
+          const notes = progression[bar % progression.length];
           bar += 1;
-          // ii–V-ish pad plus a walking bass line
-          this.pad(out, [root, root * 1.19, root * 1.41, root * 1.78], 5.2, 0.06);
-          const walk = [0, 3, 5, 7, 10];
-          for (let i = 0; i < 4; i++) {
-            const step = walk[(i + bar) % walk.length];
-            this.note(out, root * Math.pow(2, step / 12), 0.42, 0.1, "sine", i * 0.62);
-          }
-          // brushed snare
-          for (let i = 0; i < 4; i++) {
-            this.burst(out, "bandpass", 1800, 0.12, 0.035, 0.8, i * 1.24 + 0.3);
-          }
+          this.chord(bus, notes, 0, barSeconds * 0.9, 0.05);
+          // walking bass: four quarter notes
+          const walk = [0, 3, 7, 10];
+          walk.forEach((step, i) => {
+            this.bass(bus, notes[0] / 2 * Math.pow(2, step / 12), i * 0.9, 0.8, 0.11);
+          });
+          // brush snare on 2 and 4, light hat eighths
+          this.drum(bus, "snare", 0.09, 0.9);
+          this.drum(bus, "snare", 0.08, 2.7);
+          for (let i = 0; i < 8; i++) this.drum(bus, "hat", 0.05, i * 0.45);
+          // a blue note for colour
+          this.voice_note(send, notes[1] * 2 * Math.pow(2, 3 / 12), 1.6, 1.2, 0.04, "sine");
         };
-        phrase();
-        this.every(5000, phrase);
+        playBar();
+        this.every(barSeconds * 1000, playBar);
         break;
       }
+
       case "lofiBeats": {
-        this.noise(out, "pink", 0.05, { type: "highpass", freq: 3200 });
-        const roots = ["F2", "A2", "D2", "G2"];
+        const { bus } = this.space(out, 0.22);
+        // Am7 – Fmaj7 – Cmaj7 – G6, boom-bap drums at 78 BPM
+        const progression = [
+          ["A2", "C3", "E3", "G3"],
+          ["F2", "A2", "C3", "E3"],
+          ["C3", "E3", "G3", "B3"],
+          ["G2", "B2", "D3", "E3"],
+        ].map((c) => c.map(hz));
+        const barSeconds = 3.1;
         let bar = 0;
-        const loop = () => {
-          const root = hz(roots[bar % roots.length]);
+        const playBar = () => {
+          const notes = progression[bar % progression.length];
           bar += 1;
-          this.pad(out, [root, root * 1.19, root * 1.5], 4.4, 0.06);
-          // 78 BPM, one bar ≈ 4.2 s: hip-hop-ish boom-bap
-          this.drum(out, "kick", 0.26, 0);
-          this.drum(out, "kick", 0.2, 0.62);
-          this.drum(out, "snare", 0.22, 1.05);
-          this.drum(out, "snare", 0.2, 3.15);
-          for (let i = 0; i < 8; i++) this.drum(out, "hat", 0.1, 1.2 + i * 0.38);
-          this.note(out, root * 2, 0.6, 0.06, "triangle", 0.3);
+          this.chord(bus, notes, 0, 2.4, 0.05);
+          this.bass(bus, notes[0], 0, 1.0, 0.14);
+          this.bass(bus, notes[0] * 1.5, 1.55, 0.7, 0.11);
+          // kick / snare / hats pattern
+          this.drum(bus, "kick", 0.26, 0);
+          this.drum(bus, "kick", 0.2, 1.9);
+          this.drum(bus, "snare", 0.2, 0.78);
+          this.drum(bus, "snare", 0.18, 2.34);
+          for (let i = 0; i < 8; i++) this.drum(bus, "hat", 0.06, 0.4 + i * 0.28);
+          // melodic hook, same phrase twice then a variation
+          const hook = [0, 3, 5, 7];
+          hook.forEach((degree, i) => {
+            const freq = notes[0] * 2 * Math.pow(2, degree / 12);
+            this.voice_note(bus, freq, i * 0.78, 0.6, 0.05, "triangle");
+          });
         };
-        loop();
-        this.every(4200, loop);
+        playBar();
+        this.every(barSeconds * 1000, playBar);
         break;
       }
+
       case "chillwave": {
-        this.noise(out, "pink", 0.03, { type: "highpass", freq: 4200 });
-        const roots = ["C3", "E3", "A2", "F3"];
+        const { bus, send } = this.space(out, 0.4);
+        // Am – F – C – G with a slow arpeggio, wide and warm
+        const progression = [
+          ["A2", "C3", "E3"],
+          ["F2", "A2", "C3"],
+          ["C3", "E3", "G3"],
+          ["G2", "B2", "D3"],
+        ].map((c) => c.map(hz));
+        const barSeconds = 6.4;
         let bar = 0;
-        const phrase = () => {
-          const root = hz(roots[bar % roots.length]);
+        const playBar = () => {
+          const notes = progression[bar % progression.length];
           bar += 1;
-          this.pad(out, [root, root * 1.25, root * 1.5, root * 2.5], 7.5, 0.055, "sawtooth");
-          for (let i = 0; i < 6; i++) {
-            this.note(
-              out,
-              root * Math.pow(2, SCALES.lydian[i % SCALES.lydian.length] / 12) * 2,
-              0.32,
-              0.045,
-              "triangle",
-              0.4 + i * 0.52,
-            );
+          this.chord(bus, notes.map((n) => n * 2), 0, barSeconds * 0.95, 0.05);
+          this.bass(bus, notes[0], 0, barSeconds * 0.6, 0.12);
+          for (let i = 0; i < 8; i++) {
+            const degree = SCALES.lydian[i % SCALES.lydian.length];
+            const freq = notes[0] * 4 * Math.pow(2, degree / 12);
+            const at = i * (barSeconds / 8) + 0.02;
+            this.voice_note(bus, freq, at, 0.9, 0.035, "triangle");
+            this.voice_note(send, freq * 2, at, 1.6, 0.018, "sine");
           }
         };
-        phrase();
-        this.every(7200, phrase);
+        playBar();
+        this.every(barSeconds * 1000, playBar);
         break;
       }
+
       case "synthwave": {
-        this.noise(out, "pink", 0.03, { type: "highpass", freq: 5000 });
-        const roots = ["E2", "C2", "G2", "D2"];
+        const { bus } = this.space(out, 0.26);
+        // Em – C – G – D at a driving tempo with a 16th arpeggio
+        const progression = [
+          ["E2", "G2", "B2"],
+          ["C2", "E2", "G2"],
+          ["G2", "B2", "D3"],
+          ["D2", "F#2", "A2"],
+        ].map((c) => c.map(hz));
+        const barSeconds = 3.6;
         let bar = 0;
-        const phrase = () => {
-          const root = hz(roots[bar % roots.length]);
+        const playBar = () => {
+          const notes = progression[bar % progression.length];
           bar += 1;
-          this.pad(out, [root, root * 1.5, root * 2], 3.4, 0.07, "sawtooth");
-          this.drum(out, "kick", 0.24, 0);
-          this.drum(out, "kick", 0.22, 1.0);
-          this.drum(out, "snare", 0.18, 0.5);
-          this.drum(out, "snare", 0.18, 1.5);
-          // 16th-note arpeggio
-          const arp = SCALES.minorPentatonic;
-          for (let i = 0; i < 16; i++) {
-            const degree = arp[i % arp.length];
-            this.note(out, root * 2 * Math.pow(2, degree / 12), 0.14, 0.045, "square", i * 0.25);
+          this.chord(bus, notes.map((n) => n * 2), 0, barSeconds * 0.9, 0.045);
+          const steps = 16;
+          for (let i = 0; i < steps; i++) {
+            const degree = SCALES.minorPentatonic[i % SCALES.minorPentatonic.length];
+            const freq = notes[0] * 4 * Math.pow(2, degree / 12);
+            const at = i * (barSeconds / steps);
+            this.voice_note(bus, freq, at, 0.16, 0.032, "square");
           }
+          this.bass(bus, notes[0], 0, barSeconds * 0.48, 0.15);
+          this.bass(bus, notes[0], barSeconds * 0.5, barSeconds * 0.48, 0.15);
+          this.drum(bus, "kick", 0.24, 0);
+          this.drum(bus, "kick", 0.22, barSeconds * 0.5);
+          this.drum(bus, "snare", 0.16, barSeconds * 0.25);
+          this.drum(bus, "snare", 0.16, barSeconds * 0.75);
         };
-        phrase();
-        this.every(4000, phrase);
+        playBar();
+        this.every(barSeconds * 1000, playBar);
         break;
       }
+
       case "ambient": {
-        const roots = ["C2", "G2", "A2", "F2"];
+        const { bus, send } = this.space(out, 0.5);
+        // very slow swells: one chord every 16 s, nothing else
+        const progression = [
+          ["C2", "G2", "C3", "E3"],
+          ["A2", "E3", "A3", "C4"],
+          ["F2", "C3", "F3", "A3"],
+          ["G2", "D3", "G3", "B3"],
+        ].map((c) => c.map(hz));
+        const barSeconds = 16;
         let bar = 0;
         const swell = () => {
-          const root = hz(roots[bar % roots.length]);
+          const notes = progression[bar % progression.length];
           bar += 1;
-          this.pad(out, [root, root * 1.5, root * 2.99, root * 4.02], 16, 0.045, "sine");
+          this.chord(bus, notes, 0, barSeconds * 1.6, 0.05);
+          this.chord(send, notes.map((n) => n * 2), 2, barSeconds * 1.8, 0.02);
         };
-        this.noise(out, "brown", 0.1, { type: "lowpass", freq: 240 });
         swell();
-        this.every(15000, swell);
+        this.every(barSeconds * 1000, swell);
         break;
       }
+
       case "bowls": {
-        this.noise(out, "brown", 0.14, { type: "lowpass", freq: 260 });
-        this.every(6500, () => {
-          const base = [174.61, 196, 220, 261.63][Math.floor(Math.random() * 4)];
-          this.note(out, base, 7, 0.075, "sine", 0);
-          this.note(out, base * 2.004, 5.5, 0.03, "sine", 0.03);
-          this.note(out, base * 3.01, 3.5, 0.012, "sine", 0.06);
-        });
+        const { bus, send } = this.space(out, 0.55);
+        // singing bowls in A minor pentatonic, one strike every few seconds
+        const pitches = ["A2", "C3", "D3", "E3", "G3", "A3"].map(hz);
+        const strike = () => {
+          const base = pitches[Math.floor(Math.random() * pitches.length)];
+          this.voice_note(bus, base, 0, 7.5, 0.075, "sine");
+          this.voice_note(bus, base * 2.005, 0.02, 5.5, 0.03, "sine");
+          this.voice_note(send, base * 3.01, 0.05, 4, 0.015, "sine");
+        };
+        strike();
+        this.every(6500, strike);
         break;
       }
+
       case "tanpura": {
-        // Sa–Pa drone: steady plucked cycle under everything
+        const { bus } = this.space(out, 0.3);
+        // Sa–Pa drone: a steady plucked cycle, no noise under it
         const sa = hz("C3");
         const pa = sa * 1.4983;
         this.every(1800, () => {
-          this.note(out, sa, 2.2, 0.075, "triangle");
-          this.note(out, pa, 2.0, 0.055, "triangle", 0.45);
-          this.note(out, sa / 2, 2.6, 0.07, "sine", 0.9);
+          this.voice_note(bus, sa, 0, 2.2, 0.085, "triangle");
+          this.voice_note(bus, pa, 0.45, 2.0, 0.06, "triangle");
+          this.voice_note(bus, sa / 2, 0.9, 2.6, 0.08, "sine");
         });
-        this.noise(out, "brown", 0.05, { type: "lowpass", freq: 320 });
         break;
       }
+
       case "flute": {
-        this.noise(out, "pink", 0.08, { type: "bandpass", freq: 900, q: 0.4 });
+        const { bus, send } = this.space(out, 0.45);
+        // bansuri phrases in D major pentatonic over a soft drone
         const root = hz("D3");
-        this.every(5800, () => {
-          const scale = SCALES.majorPentatonic;
-          const notes = 4 + Math.floor(Math.random() * 3);
-          let t = 0;
+        this.every(1200, () => this.voice_note(bus, root / 2, 0, 6, 0.05, "sine"));
+        const phrase = () => {
+          const notes = 4 + Math.floor(Math.random() * 4);
+          let at = 0;
           for (let i = 0; i < notes; i++) {
-            const degree = scale[Math.floor(Math.random() * scale.length)];
+            const degree = SCALES.majorPentatonic[Math.floor(Math.random() * 5)];
             const octave = Math.random() > 0.5 ? 2 : 1;
-            this.note(out, root * Math.pow(2, degree / 12) * octave, this.rnd(0.5, 1.0), 0.05, "sine", t, 1.004);
-            t += this.rnd(0.5, 0.85);
+            const freq = root * Math.pow(2, degree / 12) * octave;
+            const dur = 0.6 + Math.random() * 0.7;
+            this.voice_note(bus, freq, at, dur, 0.07, "sine");
+            this.voice_note(send, freq * 2, at + 0.03, dur * 1.3, 0.02, "sine");
+            at += dur * 0.85;
           }
-        });
+        };
+        phrase();
+        this.every(5800, phrase);
         break;
       }
 
@@ -670,6 +802,7 @@ export class AmbientEngine {
       case "deep":
       case "alpha":
       case "theta": {
+        const { bus } = this.space(out, 0.2);
         const beat = kind === "deep" ? 40 : kind === "alpha" ? 10 : 6;
         const carrier = kind === "deep" ? 200 : 180;
         const ctx = this.ensureCtx();
@@ -684,15 +817,14 @@ export class AmbientEngine {
         const gr = ctx.createGain();
         gr.gain.value = 0.085;
         left.connect(gl);
-        gl.connect(out);
+        gl.connect(bus);
         right.connect(gr);
-        gr.connect(out);
+        gr.connect(bus);
         this.lfo(gl.gain, 0.13, 0.04);
         left.start();
         right.start();
         this.sources.push(left, right);
         this.nodes.push(gl, gr);
-        this.noise(out, "brown", kind === "deep" ? 0.12 : 0.08, { type: "lowpass", freq: 400 });
         break;
       }
     }
@@ -701,14 +833,14 @@ export class AmbientEngine {
   /* --------------------------- transport ---------------------------- */
 
   /**
-   * Start a mix. The first entry is the primary soundscape; the rest are layers.
-   * Replaces whatever is currently playing.
+   * Start (or switch to) a soundscape. One sound at a time: the Music page
+   * plays a single original track or ambience, never a stack of layers.
    */
-  playMix(layers: Layer[], volume?: number) {
+  play(kind: SoundKind, volume?: number) {
     const ctx = this.ensureCtx();
     if (volume !== undefined) this.volume = volume;
     this.stopAllNodes();
-    this.kinds = layers.map((l) => l.kind);
+    this.kinds = [kind];
 
     if (!this.master) {
       this.master = ctx.createGain();
@@ -716,27 +848,13 @@ export class AmbientEngine {
     }
     this.master.gain.value = this.volume;
 
-    for (const layer of layers) {
-      const rail = this.rail(layer.volume ?? 1);
-      this.voice(layer.kind, rail);
-    }
-  }
-
-  /** Start (or switch to) a single soundscape. */
-  play(kind: SoundKind, volume?: number, mix?: Layer[]) {
-    const extras = (mix ?? []).filter((l) => l.kind !== kind);
-    this.playMix([{ kind, volume: 1 }, ...extras], volume);
+    const rail = this.rail(1);
+    this.voice(kind, rail);
   }
 
   setVolume(v: number) {
     this.volume = v;
     if (this.master) this.master.gain.value = v;
-  }
-
-  /** Adjust the level of one layer of the running mix without restarting it. */
-  setLayerVolume(index: number, value: number) {
-    const rail = this.layerGains[index];
-    if (rail) rail.gain.value = Math.max(0, Math.min(1, value));
   }
 
   private stopAllNodes() {
@@ -776,11 +894,6 @@ export class AmbientEngine {
 
   current(): SoundKind | null {
     return this.kinds[0] ?? null;
-  }
-
-  /** Every layer currently playing, in order. */
-  currentMix(): SoundKind[] {
-    return [...this.kinds];
   }
 
   /** Short alert used for phase changes and the Focus Guard. */
