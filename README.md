@@ -77,17 +77,19 @@ domain.
 ### 4. Tests
 
 ```bash
-npm test              # all four suites
-npm run test:engine   # pure logic (analytics, streaks, ratings, rooms)
-npm run test:relay    # raw RFC 6455 protocol test of the relay
+npm test                # all six suites
+npm run test:engine     # pure logic (analytics, streaks, ratings, rooms)
+npm run test:relay      # raw RFC 6455 protocol test of the relay
+npm run test:extension  # manifest / permission / CSP validation
 ```
 
 `npm test` bundles the app with esbuild, starts a relay if one is not running,
-then runs **121 checks** across five suites:
+then runs **155 checks** across six suites:
 
 | Suite | Covers |
 | --- | --- |
 | `engine` (50) | formatting, analytics, streaks, 👍/👎 recommendations, drift helpers, v1→v2 state migration, pruning |
+| `extension` (34) | manifest ↔ shipped files, `chrome.*` usage ↔ declared permissions, host permissions ↔ content-script matches, MV3 CSP compliance (no inline scripts, no `javascript:` URLs, no `eval`) |
 | `relay` (11) | raw RFC 6455 handshake, presence, progress fan‑out, chat, reactions, leave |
 | `ui-render` (17) | every one of the 12 routes renders with zero console errors |
 | `ui-resilience` (8) | **no relay running** → the app degrades to local mode instead of crashing |
@@ -178,12 +180,28 @@ rooms are reaped.
 
 ---
 
+## Continuous integration
+
+`.github/workflows/ci.yml` runs four jobs:
+
+| Job | Runner | Verifies |
+| --- | --- | --- |
+| **web** | ubuntu | typecheck, all six test suites, production build, uploads `dist` |
+| **rust** | windows / ubuntu / macos | `cargo check`, `cargo test`, plus advisory `fmt` + `clippy` |
+| **extension** | ubuntu | manifest/permission/CSP validation, syntax check, packaged `regain-extension.zip` |
+| **desktop** | windows | full `tauri build` → uploads the `.msi` / `.exe` installers |
+
+The Rust and Windows jobs exist because this project was assembled in an
+environment without a Rust toolchain: CI is what actually compiles the core and
+produces installers. Style gates (`cargo fmt`, `cargo clippy`) run advisory so a
+formatting nit cannot hide a real regression.
+
 ## Verification status
 
 Verified in this workspace:
 
 * `npm run build` — TypeScript clean, 55 modules, 289 kB JS (88 kB gzip).
-* `npm test` — engine 50, relay 11, ui‑render 17, ui‑resilience 8, ui‑flow 35 checks pass.
+* `npm test` — engine 50, extension 34, relay 11, ui‑render 17, ui‑resilience 8, ui‑flow 35 checks pass.
 * Relay verified end‑to‑end with two independent clients (presence, progress,
   chat, reactions, leave).
 * Live Vite preview serves every route; the dev server binds `0.0.0.0` and
@@ -197,7 +215,8 @@ Not verified here (no Rust toolchain and no Windows in this environment):
 * `cargo build` / `npm run tauri build` — the Rust core and `tauri.conf.json`
   are written against Tauri 2 APIs but have not been compiled.
 * Native foreground‑window detection and minimise‑on‑sight blocking.
-* The unpacked Chrome extension inside a real browser.
+* The unpacked Chrome extension inside a real browser (its manifest, permissions
+  and MV3 compliance are validated statically in CI instead).
 
 ---
 
@@ -218,7 +237,9 @@ src/
   styles/global.css                        design system
 regain-extension/                          Chrome/Edge MV3 companion
 server/room-server.mjs                     zero-dependency WebSocket relay
-tests/                                     engine, relay, ui-render, ui-resilience, ui-flow
+tests/                                     engine, extension, relay, ui-render,
+                                           ui-resilience, ui-flow
+.github/workflows/ci.yml                   web / rust / extension / desktop jobs
 ```
 
 ## License

@@ -18,6 +18,7 @@
       h1 { font-size: 26px; margin: 12px 0 6px; }
       p { opacity: 0.72; max-width: 520px; }
       a { color: #7c5cff; font-weight: 600; text-decoration: none; }
+      .hint { font-size: 13px; opacity: .55; }
       .card {
         border: 1px solid rgba(255,255,255,.12);
         background: rgba(255,255,255,.04);
@@ -30,15 +31,12 @@
     <div class="card">
       <div style="font-size: 56px">🛡️</div>
       <h1>Blocked by Regain</h1>
-      <p id="msg">This site is on your focus blocklist.</p>
-      <p><a href="javascript:window.close()">Close this tab</a></p>
+      <p>
+        <strong id="domain-name">This site</strong> is on your focus blocklist.
+      </p>
+      <p class="hint">Blocked while a Regain focus session is running.</p>
+      <p><a href="index.html" id="close-tab">Close this tab</a></p>
     </div>
-    <script>
-      const params = new URLSearchParams(location.search);
-      const domain = params.get("domain");
-      if (domain) {
-        document.getElementById("msg").textContent = domain + " is on your focus blocklist.";
-      }
-    </script>
+    <script src="blocked.js"></script>
   </body>
 </html>

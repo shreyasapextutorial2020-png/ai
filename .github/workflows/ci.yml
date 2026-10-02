@@ -1,0 +1,147 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "arena/**"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web:
+    name: Web app, engine & tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Tests (engine, extension, relay, UI render, resilience, flow)
+        run: npm test
+
+      - name: Production build
+        run: npm run build
+
+      - name: Upload build output
+        uses: actions/upload-artifact@v4
+        with:
+          name: regain-dist
+          path: dist
+          retention-days: 7
+
+  rust:
+    name: Rust core (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Linux system dependencies (webkit2gtk)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf \
+            build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ". -> target"
+
+      # Style gates run in advisory mode: they report without failing the build,
+      # because the core was written without a local toolchain.
+      - name: cargo fmt (advisory)
+        continue-on-error: true
+        run: cargo fmt --check
+
+      - name: cargo clippy (advisory)
+        continue-on-error: true
+        run: cargo clippy --all-targets
+
+      - name: cargo check
+        run: cargo check --all-targets --verbose
+
+      - name: cargo test
+        run: cargo test --verbose
+
+  extension:
+    name: Extension packaging
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Validate manifest, permissions and MV3 CSP compliance
+        run: node tests/extension.test.mjs
+
+      - name: Syntax check extension scripts
+        run: |
+          for f in regain-extension/*.js; do node --check "$f"; done
+
+      - name: Package the unpacked extension
+        run: |
+          cd regain-extension
+          zip -r ../regain-extension.zip . -x "*.DS_Store"
+
+      - name: Upload extension bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: regain-extension
+          path: regain-extension.zip
+          retention-days: 7
+
+  desktop:
+    name: Desktop bundle (Windows)
+    runs-on: windows-latest
+    needs: [web]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ". -> target"
+
+      - run: npm ci --no-audit --no-fund
+
+      - name: Build the Tauri desktop app
+        run: npm run tauri build
+
+      - name: Upload installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: regain-windows-installers
+          path: |
+            target/release/bundle/msi/*.msi
+            target/release/bundle/nsis/*.exe
+          if-no-files-found: warn
+          retention-days: 14
