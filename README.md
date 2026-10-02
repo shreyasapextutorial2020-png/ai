@@ -36,6 +36,9 @@ browser‑preview mode so the whole product runs without a desktop build.
 
 ---
 
+> New here? `START-HERE.txt` is the two-minute version: how to run it, load the
+> extension and use the blockers.
+
 ## Quick start
 
 ### 1. Browser preview (no desktop build needed)

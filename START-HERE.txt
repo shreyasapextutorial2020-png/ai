@@ -1,0 +1,120 @@
+Regain for PC — start here
+==========================
+
+Everything the app needs is in this folder; nothing is hidden. This file is the
+short version. The longer story (architecture, feature matrix, test breakdown,
+CI) is in README.md.
+
+WHAT'S INSIDE
+  src/                    the whole UI — 12 pages, components, store, libraries.
+                          src/lib/blocking.ts holds the rule matching used by
+                          the app and mirrored in the Rust core.
+  tauri.conf.json         app name, windows, bundled icons, dev port 1420
+  lib.rs / main.rs /      the Tauri 2 Rust core, at the repo root
+  monitor.rs / build.rs     (there is no src-tauri/ folder in this project)
+  icons/                  PNG/ICO/ICNS icon set — PNGs must stay 8-bit RGBA
+  regain-extension/       Chrome/Edge MV3 blocker extension
+  server/room-server.mjs  study-room relay (port 8790)
+  tests/                  7 suites, 283 checks
+  scripts/make-icns.mjs   rebuilds icons/icon.icns from the PNGs
+
+
+QUICK START (browser preview — no Rust needed)
+  1. Install Node.js 18 or newer (https://nodejs.org)
+  2. Open a terminal in this folder and run:
+       npm install
+       npm run dev
+  3. Open http://localhost:1420
+
+RUN THE REAL DESKTOP APP (Tauri)
+  Extra requirements on Windows: Rust (https://rustup.rs) plus the
+  "Desktop development with C++" workload from Visual Studio Build Tools, and
+  the WebView2 runtime (already present on Windows 10/11).
+
+       npm run tauri dev       live desktop window while developing
+       npm run tauri build     produces .msi and NSIS .exe installers
+                               (output: src-tauri/target/release/bundle)
+
+CHECK THAT EVERYTHING WORKS
+       npm test                engine 103, extension 50, icons 32, relay 11,
+                               ui-render 30, ui-resilience 8, ui-flow 49
+       npm run build           production web build into dist/
+
+
+LOAD THE BLOCKER EXTENSION (Chrome or Edge)
+  1. Go to chrome://extensions (or edge://extensions)
+  2. Turn on "Developer mode"
+  3. "Load unpacked" -> select the regain-extension folder
+  4. Open the popup: "Block this site" blocks the domain of the tab you are on.
+     Those domains keep working even when the desktop app is closed.
+
+BLOCKING CHEAT SHEET
+  - Website rules cover subdomains: "chess.com" also blocks play.chess.com.
+    Paste a full link when adding; it is reduced to the domain for you.
+  - Each rule has a mode: "In focus" (only during a session) or "Always".
+    Adult sites are Always by default.
+  - A website rule cannot stop a desktop app, so the add dialog offers the
+    matching process (Chess.exe for chess.com) — accept it to block both.
+  - App rules match loosely on purpose: "chess" catches Chess.exe,
+    chess.com.exe and any window whose title mentions chess.
+  - Every rule has a "Test" button that logs a real block, and a counter that
+    shows how many times it has actually fired.
+  - Blocking presets arm a whole category in one tap (chess & board games,
+    streaming, social media, chat, shopping, adult).
+  - The chip at the top of Blocking tells you whether the extension is
+    connected. If it says "not detected", load the extension (above) — the app
+    on its own can only block desktop apps, not websites.
+
+LIKE / DISLIKE
+  - Every finished session takes a thumbs-up or thumbs-down on the Focus page;
+    that rating drives the suggestions on Insights (block length, timer mode,
+    time of day).
+  - Insights also has an app-level "How is Regain working for you?" with
+    Like / Dislike. Tap the same button again to clear it, and a dislike swaps
+    the pitch for concrete fixes.
+  - After your third finished session Regain asks once. Nothing is sent
+    anywhere: ratings live in your local state file only.
+
+FOCUS MUSIC
+  30 soundscapes are generated live with the Web Audio API (no audio files):
+  noise masking, rain/thunderstorm/stream/wind/ocean/fire/forest/crickets/
+  chimes, café/library/night train/typing/cabin hum, lo-fi pads/piano/jazz/
+  beats, chillwave, synthwave, ambient, singing bowls, tanpura, bansuri and
+  40 Hz / alpha / theta drones. The Music page also has a layer mixer: play a
+  primary sound and stack up to 3 more underneath it.
+
+STUDY ROOMS
+  The room relay is a small local server. Start it with:
+       node server/room-server.mjs          # listens on 0.0.0.0:8790
+  The app detects it automatically on localhost:8790.
+
+
+FOLDERS YOU SHOULD DELETE OR IGNORE
+  node_modules/   recreated by npm install
+  dist/           recreated by npm run build
+  target/         Rust build output, recreated by cargo / npm run tauri build
+
+COMMON EDITS
+  App name / window size / port      -> tauri.conf.json
+  App icon                           -> replace icons/source.png (1024x1024,
+                                        keep it RGBA), then: npm run icons
+  Blocked sites, defaults            -> src/lib/defaults.ts (WEB_CATALOGUE,
+                                        APP_CATALOGUE, SOUNDS)
+  Free vs Pro features               -> src/store/AppStore.tsx (search "isPro")
+  Colours and themes                 -> src/styles/global.css
+  More soundscapes                   -> SOUNDS in src/lib/defaults.ts plus the
+                                        matching voice in src/lib/audio.ts
+  Blocking rules / scoring           -> src/lib/blocking.ts (shared logic),
+                                        lib.rs + monitor.rs (native watcher)
+
+TROUBLESHOOTING
+  "Port 1420 is already in use"  -> close the other Vite dev server, or change
+                                    server.port in vite.config.ts (keep devUrl
+                                    in tauri.conf.json in sync)
+  Icons fail the test suite      -> the PNGs must be 8-bit RGBA, not RGB.
+                                    Tauri refuses to compile with RGB icons.
+  Blocking does nothing at all   -> the desktop app blocks windows; websites
+                                    need the companion extension loaded in the
+                                    browser. Check the chip on the Blocking page.
+  npm install is slow / offline  -> package-lock.json pins every dependency;
+                                    run it again with a stable connection.
