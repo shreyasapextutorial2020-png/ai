@@ -76,6 +76,15 @@ jobs:
         with:
           workspaces: ". -> target"
 
+      # tauri::generate_context! reads frontendDist at compile time, so the
+      # folder must exist even for a type-check. The real build is in the
+      # desktop job; this placeholder only satisfies the macro.
+      - name: Placeholder frontendDist
+        shell: bash
+        run: |
+          mkdir -p dist
+          [ -f dist/index.html ] || echo '<!doctype html><title>placeholder</title>' > dist/index.html
+
       # Style gates run in advisory mode: they report without failing the build,
       # because the core was written without a local toolchain.
       - name: cargo fmt (advisory)
