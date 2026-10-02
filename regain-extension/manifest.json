@@ -1,0 +1,32 @@
+{
+  "manifest_version": 3,
+  "name": "Regain Focus Companion",
+  "version": "1.0.0",
+  "description": "Companion extension for Regain PC to block Shorts, Reels, and distracting web feeds.",
+  "permissions": [
+    "storage",
+    "alarms",
+    "declarativeNetRequest"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "host_permissions": [
+    "*://*.youtube.com/*",
+    "*://*.instagram.com/*",
+    "*://*.facebook.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["*://*.youtube.com/*"],
+      "css": ["youtube.css"],
+      "js": ["content.js"],
+      "run_at": "document_start"
+    },
+    {
+      "matches": ["*://*.instagram.com/*"],
+      "css": ["instagram.css"],
+      "run_at": "document_start"
+    }
+  ]
+}

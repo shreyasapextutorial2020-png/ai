@@ -1,0 +1,29 @@
+/* 1. Hide Shorts icon in Navigation Sidebar */
+ytd-guide-entry-renderer:has(a[href*="/shorts"]),
+ytd-mini-guide-entry-renderer:has(a[href*="/shorts"]),
+a[title="Shorts"],
+a[href^="/shorts"] {
+  display: none !important;
+}
+
+/* 2. Hide Shorts Shelf on Home Page AND Search Results */
+ytd-reel-shelf-renderer,
+ytd-rich-section-renderer:has(ytd-rich-shelf-renderer[is-shorts]),
+grid-shelf-renderer:has(ytd-reel-shelf-renderer),
+ytd-shelf-renderer:has(ytd-reel-shelf-renderer),
+ytd-shelf-renderer:has(a[href*="/shorts"]),
+ytd-video-renderer:has(a[href*="/shorts"]) {
+  display: none !important;
+}
+
+/* 3. Collapse search grid container if it holds shorts */
+div#contents.ytd-reel-shelf-renderer,
+#dismissible.ytd-reel-shelf-renderer {
+  display: none !important;
+}
+
+/* 4. Shorts Player view */
+ytd-shorts,
+#shorts-container {
+  display: none !important;
+}
