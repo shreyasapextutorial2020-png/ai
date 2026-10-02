@@ -17,13 +17,16 @@ if (domain) {
 }
 
 // "always" rules are permanent; "focus" rules only bite during a session.
-const mode = params.get("mode") === "always" ? "always" : "focus";
+const rawMode = params.get("mode");
+const mode = rawMode === "always" ? "always" : rawMode === "strict" ? "strict" : "focus";
 const reason = document.getElementById("reason");
 if (reason) {
   reason.textContent =
     mode === "always"
       ? "This site is on your always-blocked list."
-      : "Blocked while a Regain focus session is running.";
+      : mode === "strict"
+        ? "You turned on Block everything else — only your study sites are reachable while a session runs."
+        : "Blocked while a Regain focus session is running.";
 }
 
 const status = document.getElementById("status");

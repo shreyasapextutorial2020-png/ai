@@ -258,6 +258,9 @@ export async function syncExtensionSettings(payload: {
   reelsBlocked: boolean;
   studyMode: boolean;
   channels: string[];
+  /** block every site except `allowlist` while a session runs */
+  blockAll?: boolean;
+  allowlist?: string[];
 }) {
   await invokeSafe("update_extension_settings", payload);
 }

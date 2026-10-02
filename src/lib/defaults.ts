@@ -10,7 +10,7 @@ import type {
 } from "./types";
 
 export const STORAGE_KEY = "regain.pc.state.v1";
-export const STATE_VERSION = 5;
+export const STATE_VERSION = 6;
 
 export const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 
@@ -30,6 +30,22 @@ export const DEFAULT_SETTINGS: Settings = {
   blockReelsShorts: true,
   youtubeStudyMode: false,
   websiteBlocker: true,
+  blockAllSites: false,
+  siteAllowlist: [
+    "khanacademy.org",
+    "wikipedia.org",
+    "coursera.org",
+    "nptel.ac.in",
+    "classroom.google.com",
+    "docs.google.com",
+    "drive.google.com",
+    "github.com",
+    "stackoverflow.com",
+    "developer.mozilla.org",
+    "ncert.nic.in",
+    "byjus.com",
+    "physicswallah.com",
+  ],
   appBlocker: true,
   notifications: true,
   focusGuard: false,
@@ -141,28 +157,39 @@ const web = (
 ): WebRule => ({ id: `web-${domain}`, domain, label, icon, category, enabled, mode });
 
 export const WEB_CATALOGUE: WebRule[] = [
-  /* chess, board & card games — blocked by default, this is the usual culprit */
+  /* ---------------- chess, board, card and casual games ---------------- */
   web("chess.com", "Chess.com", "♟️", "games"),
   web("lichess.org", "Lichess", "♞", "games"),
   web("chess24.com", "Chess24", "♜", "games"),
   web("chesskid.com", "ChessKid", "♟️", "games", false),
+  web("chessgames.com", "Chessgames", "♜", "games", false),
+  web("lichess4545.com", "Lichess 45+45", "♞", "games", false),
   web("rummycircle.com", "RummyCircle", "🃏", "games"),
-  web("add52.com", "Adda52 Rummy", "🃏", "games", false),
+  web("add52.com", "Adda52", "🃏", "games", false),
+  web("rummytime.com", "RummyTime", "🃏", "games", false),
   web("mpl.live", "MPL", "🎯", "games", false),
   web("dream11.com", "Dream11", "🏏", "games", false),
-  web("play.chess.com", "Chess.com (play)", "♟️", "games", false),
-  /* casual web games */
+  web("my11circle.com", "My11Circle", "🏏", "games", false),
+  web("pokerbaazi.com", "PokerBaazi", "♠️", "games", false),
+  web("solitaire.org", "Solitaire", "🃏", "games", false),
   web("friv.com", "Friv", "🎮", "games", false),
   web("poki.com", "Poki", "🎮", "games", false),
   web("y8.com", "Y8 Games", "🎮", "games", false),
   web("crazygames.com", "CrazyGames", "🎮", "games", false),
   web("miniclip.com", "Miniclip", "🎮", "games", false),
+  web("addictinggames.com", "Addicting Games", "🎮", "games", false),
+  web("silvergames.com", "SilverGames", "🎮", "games", false),
+  web("gamepix.com", "GamePix", "🎮", "games", false),
+  web("212.net", "212 Arcade", "🎮", "games", false),
   web("roblox.com", "Roblox", "🧱", "games"),
   web("store.steampowered.com", "Steam Store", "🎮", "games"),
+  web("steamcommunity.com", "Steam Community", "🎮", "games"),
   web("epicgames.com", "Epic Games Store", "🕹️", "games", false),
-  /* short-form & streaming video */
-  /* YouTube stays available by default so lectures keep working: the Shorts
-     shield and Study Mode tame it. Full blocking is one toggle away. */
+  web("itch.io", "itch.io", "🎲", "games", false),
+  web("kongregate.com", "Kongregate", "🎮", "games", false),
+  web("chess-results.com", "Chess Results", "📋", "games", false),
+
+  /* --------------------- short-form & streaming video -------------------- */
   web("youtube.com", "YouTube", "▶️", "video", false),
   web("netflix.com", "Netflix", "🍿", "video"),
   web("primevideo.com", "Prime Video", "📺", "video"),
@@ -170,9 +197,15 @@ export const WEB_CATALOGUE: WebRule[] = [
   web("jiocinema.com", "JioCinema", "🎥", "video", false),
   web("zee5.com", "ZEE5", "🎥", "video", false),
   web("sonyliv.com", "SonyLIV", "🎥", "video", false),
+  web("mxplayer.in", "MX Player", "🎬", "video", false),
   web("twitch.tv", "Twitch", "🟣", "video"),
   web("dailymotion.com", "Dailymotion", "📹", "video", false),
-  /* social */
+  web("vimeo.com", "Vimeo", "📹", "video", false),
+  web("hulu.com", "Hulu", "🍿", "video", false),
+  web("crunchyroll.com", "Crunchyroll", "🐉", "video", false),
+  web("aniwatch.to", "Aniwatch", "🐉", "video", false),
+
+  /* ------------------------------ social -------------------------------- */
   web("instagram.com", "Instagram", "📸", "social"),
   web("tiktok.com", "TikTok", "🎵", "social"),
   web("snapchat.com", "Snapchat", "👻", "social"),
@@ -182,35 +215,81 @@ export const WEB_CATALOGUE: WebRule[] = [
   web("facebook.com", "Facebook", "📘", "social"),
   web("threads.net", "Threads", "🧵", "social", false),
   web("pinterest.com", "Pinterest", "📌", "social", false),
+  web("tumblr.com", "Tumblr", "🌀", "social", false),
   web("quora.com", "Quora", "❓", "social", false),
   web("linkedin.com", "LinkedIn", "💼", "social", false),
-  /* chat */
+  web("sharechat.com", "ShareChat", "🗨️", "social", false),
+  web("mojapp.in", "Moj", "🎬", "social", false),
+  web("joshapp.com", "Josh", "🎬", "social", false),
+  web("9gag.com", "9GAG", "😂", "social", false),
+  web("imgur.com", "Imgur", "🖼️", "social", false),
+  web("vk.com", "VK", "🌐", "social", false),
+
+  /* ------------------------------- chat --------------------------------- */
   web("discord.com", "Discord", "💬", "chat"),
   web("web.whatsapp.com", "WhatsApp Web", "🟢", "chat"),
   web("telegram.org", "Telegram Web", "✈️", "chat", false),
-  /* shopping */
+  web("messenger.com", "Messenger", "💬", "chat"),
+  web("slack.com", "Slack", "🧵", "chat", false),
+
+  /* ----------------------------- shopping ------------------------------- */
   web("amazon.in", "Amazon", "🛒", "shopping", false),
+  web("amazon.com", "Amazon (US)", "🛒", "shopping", false),
   web("flipkart.com", "Flipkart", "🛍️", "shopping", false),
   web("myntra.com", "Myntra", "👕", "shopping", false),
   web("ajio.com", "AJIO", "🛍️", "shopping", false),
   web("meesho.com", "Meesho", "📦", "shopping", false),
   web("nykaa.com", "Nykaa", "💄", "shopping", false),
+  web("tatacliq.com", "Tata CLiQ", "🛒", "shopping", false),
+  web("croma.com", "Croma", "🛒", "shopping", false),
+  web("snapdeal.com", "Snapdeal", "🛒", "shopping", false),
   web("aliexpress.com", "AliExpress", "📦", "shopping", false),
   web("ebay.com", "eBay", "🛒", "shopping", false),
-  /* news & AI chat */
+  web("wish.com", "Wish", "📦", "shopping", false),
+
+  /* ------------------------------- news --------------------------------- */
   web("news.google.com", "Google News", "📰", "news", false),
   web("timesofindia.com", "Times of India", "📰", "news", false),
   web("ndtv.com", "NDTV", "📰", "news", false),
   web("hindustantimes.com", "Hindustan Times", "📰", "news", false),
+  web("thehindu.com", "The Hindu", "📰", "news", false),
   web("inshorts.com", "Inshorts", "📰", "news", false),
+  web("bbc.com", "BBC", "📰", "news", false),
+  web("cnn.com", "CNN", "📰", "news", false),
+  web("espn.com", "ESPN", "🏟️", "news", false),
+  web("cricbuzz.com", "Cricbuzz", "🏏", "news", false),
+
+  /* --------------------------- AI chat & tools -------------------------- */
   web("chatgpt.com", "ChatGPT", "🤖", "other", false),
   web("gemini.google.com", "Gemini", "✨", "other", false),
-  /* adult — always blocked, never gated behind a session */
+  web("claude.ai", "Claude", "🤖", "other", false),
+  web("perplexity.ai", "Perplexity", "🔎", "other", false),
+
+  /* ------------------------------ dating -------------------------------- */
+  web("tinder.com", "Tinder", "💘", "other", false),
+  web("bumble.com", "Bumble", "💛", "other", false),
+  web("hinge.co", "Hinge", "💞", "other", false),
+
+  /* ----------------------------- gambling ------------------------------- */
+  web("bet365.com", "Bet365", "🎰", "other", false),
+  web("1xbet.com", "1xBet", "🎰", "other", false),
+  web("stake.com", "Stake", "🎰", "other", false),
+  web("lottery.com", "Lottery", "🎟️", "other", false),
+
+  /* ------------------------- torrents & downloads ----------------------- */
+  web("thepiratebay.org", "The Pirate Bay", "🏴‍☠️", "other", false),
+  web("1337x.to", "1337x", "🏴‍☠️", "other", false),
+  web("yts.mx", "YTS", "🏴‍☠️", "other", false),
+
+  /* ------------------- adult — always blocked, never gated --------------- */
   web("pornhub.com", "Adult content", "🔞", "adult", true, "always"),
   web("xvideos.com", "Adult content", "🔞", "adult", true, "always"),
   web("xnxx.com", "Adult content", "🔞", "adult", true, "always"),
   web("xhamster.com", "Adult content", "🔞", "adult", true, "always"),
   web("redtube.com", "Adult content", "🔞", "adult", true, "always"),
+  web("youporn.com", "Adult content", "🔞", "adult", true, "always"),
+  web("brazzers.com", "Adult content", "🔞", "adult", true, "always"),
+  web("onlyfans.com", "Adult content", "🔞", "adult", true, "always"),
 ];
 
 /* ------------------------------------------------------------------ */

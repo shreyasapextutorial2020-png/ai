@@ -172,6 +172,10 @@ export interface Settings {
   blockReelsShorts: boolean;
   youtubeStudyMode: boolean;
   websiteBlocker: boolean;
+  /** block every site except the allowlist while a session runs */
+  blockAllSites: boolean;
+  /** domains that stay reachable when blockAllSites is on */
+  siteAllowlist: string[];
   appBlocker: boolean;
   notifications: boolean;
   focusGuard: boolean;

@@ -180,6 +180,18 @@ check("app-pushed rules are not silently removable from the block page", /This r
 check("the block page offers Go back as an escape hatch", /id="go-back"/.test(blockedHtml) && /about:blank/.test(blockedJs));
 check("the block page reports the remaining session time", /left in this session/.test(blockedJs));
 
+
+/* -------------------- block everything except the allowlist ------------- */
+
+check("the background understands the strict mode", /blockAll/.test(background) && /allowlist/.test(background));
+check("strict mode uses one rule with the allowlist excluded", /excludedRequestDomains/.test(background) && /id: 10000/.test(background));
+check("strict mode only arms during a session", /if \(!state\.focusModeActive \|\| !state\.blockAll\) return null;/.test(background));
+check("strict mode outranks the ordinary blocklist rules", /priority: 10/.test(background));
+check("strict mode never blocks the block page itself", /\/blocked\.html\?mode=strict/.test(background));
+check("the popup explains the strict mode", /Every site blocked except/.test(read("popup.js")));
+check("the block page tells the user why everything is closed", /Block everything else/.test(read("blocked.js")));
+check("the badge shows the strict state", /setBadgeText\(\{ text: "ALL" \}\)/.test(background));
+
 console.log(`\nextension: ${passed} passed, ${failures.length} failed`);
 for (const f of failures) console.log(`  ✗ ${f}`);
 process.exit(failures.length ? 1 : 0);

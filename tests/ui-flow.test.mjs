@@ -119,6 +119,29 @@ try {
     JSON.stringify(chessRules.map((r) => `${r.domain}:${r.enabled}`)),
   );
 
+  // "block everything else" — the fix for sites that are on no list at all.
+  // It lives on the Website blocker tab.
+  await env.click(env.findButton(/Website blocker/), 300);
+  const blockAllToggle = [...env.window.document.querySelectorAll('.card')]
+    .find((card) => /Block everything else/.test(card.textContent))
+    ?.querySelector('.toggle');
+  report.check("the Block everything card is on the websites tab", Boolean(blockAllToggle));
+  await env.click(blockAllToggle, 300);
+  const armed = await waitFor(() => env.storedState().settings?.blockAllSites === true, 5000);
+  report.check("turning it on persists the setting", armed, JSON.stringify(env.storedState().settings?.blockAllSites));
+  report.check(
+    "the allowlist ships with study sites",
+    (env.storedState().settings?.siteAllowlist ?? []).includes("khanacademy.org"),
+    JSON.stringify(env.storedState().settings?.siteAllowlist),
+  );
+  const allowInput = env.window.document.querySelector('input[aria-label="Add a site to the allowlist"]');
+  env.setReactValue(allowInput, "https://www.example-study.org/notes");
+  await env.click(env.findButton(/^Allow site$/), 300);
+  const allowAdded = await waitFor(() =>
+    (env.storedState().settings?.siteAllowlist ?? []).includes("example-study.org"), 5000);
+  report.check("a pasted URL is normalised into the allowlist", allowAdded, JSON.stringify(env.storedState().settings?.siteAllowlist));
+  await env.click(blockAllToggle, 200);
+
   // "Test" must prove a rule is wired up end to end
   const before = (env.storedState().blockedLog ?? []).length;
   const testButton = env.window.document.querySelector('.list-row button[aria-label^="Test blocking"]');

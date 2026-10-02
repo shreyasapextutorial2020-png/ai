@@ -273,6 +273,27 @@ check("no duplicate app rules", new Set(APP_CATALOGUE.map((r) => normalizeProces
 check("an already-blocked app matches the catalogue rule", findMatchingRule(APP_CATALOGUE.map((r) => r.process), "Chess.exe", "Chess.com - Play") !== null);
 check("a generic browser window is not matched by the chess rule", !matchesProcessRule("chess", "chrome.exe", "Physics lecture"));
 
+/* ---------------------- cover the sites people actually visit ------------ */
+check("the site catalogue is now a real blocklist", WEB_CATALOGUE.length >= 100, `${WEB_CATALOGUE.length} sites`);
+check("chess sites are all present", ["chess.com", "lichess.org", "chess24.com"].every((d) => WEB_CATALOGUE.some((r) => r.domain === d)));
+check("casual game sites are covered", ["friv.com", "poki.com", "y8.com", "crazygames.com", "miniclip.com"].every((d) => WEB_CATALOGUE.some((r) => r.domain === d)));
+check("indian card and fantasy sites are covered", ["rummycircle.com", "dream11.com", "mpl.live"].every((d) => WEB_CATALOGUE.some((r) => r.domain === d)));
+check("streaming beyond the big two is covered", ["jiocinema.com", "zee5.com", "sonyliv.com", "twitch.tv"].every((d) => WEB_CATALOGUE.some((r) => r.domain === d)));
+check("chat and dating are covered", ["discord.com", "messenger.com", "tinder.com"].every((d) => WEB_CATALOGUE.some((r) => r.domain === d)));
+check("gambling is covered", ["bet365.com", "stake.com"].some((d) => WEB_CATALOGUE.some((r) => r.domain === d)));
+check("every adult rule carries several domains", WEB_CATALOGUE.filter((r) => r.category === "adult").length >= 8);
+check("every domain in the catalogue normalises to itself",
+  WEB_CATALOGUE.every((r) => normalizeDomain(r.domain) === r.domain),
+  WEB_CATALOGUE.filter((r) => normalizeDomain(r.domain) !== r.domain).map((r) => r.domain).join(", "),
+);
+check("no duplicates in the expanded catalogue", new Set(WEB_CATALOGUE.map((r) => r.domain)).size === WEB_CATALOGUE.length,
+  WEB_CATALOGUE.map((r) => r.domain).filter((d, i, all) => all.indexOf(d) !== i).join(", "));
+check("the default-on set stays reasonable", WEB_CATALOGUE.filter((r) => r.enabled).length >= 10 && WEB_CATALOGUE.filter((r) => r.enabled).length <= 60, `${WEB_CATALOGUE.filter((r) => r.enabled).length} enabled by default`);
+const allowlist = DEFAULT_SETTINGS.siteAllowlist;
+check("the allowlist ships with study material", allowlist.length >= 5 && allowlist.includes("khanacademy.org"), allowlist.join(", "));
+check("every allowlist entry is a clean domain", allowlist.every((d) => normalizeDomain(d) === d), allowlist.join(", "));
+check("strict site blocking is off by default", DEFAULT_SETTINGS.blockAllSites === false);
+
 /* ------------------------------- music ---------------------------------- */
 check("the sound library grew past 25 soundscapes", SOUNDS.length >= 25, `${SOUNDS.length} sounds`);
 check("every sound has a unique id", new Set(SOUNDS.map((s) => s.id)).size === SOUNDS.length);

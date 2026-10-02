@@ -5,6 +5,7 @@ import { CATEGORY_LABELS } from "../lib/defaults";
 import { getBridgeStatus, isTauri } from "../lib/desktop";
 import { navigateTo } from "../lib/nav";
 import { normalizeDomain, suggestedAppsForDomain } from "../lib/blocking";
+import { BlockEverythingCard } from "../components/BlockEverythingCard";
 import type { RuleCategory, RuleMode } from "../lib/types";
 
 type Tab = "apps" | "websites" | "reels" | "study";
@@ -278,6 +279,8 @@ export function BlockingPage() {
           )}
         </Card>
       )}
+
+      {tab === "websites" && <BlockEverythingCard />}
 
       {tab === "websites" && (
         <Card

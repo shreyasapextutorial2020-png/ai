@@ -30,6 +30,9 @@ const DEFAULT_STATE = {
   channels: [],
   remainingSec: 0,
   mode: "idle",
+  /** when true, every site except `allowlist` is blocked during a session */
+  blockAll: false,
+  allowlist: [],
   bridgeConnected: false,
   /** close a tab as soon as it lands on the block page */
   autoCloseBlocked: true,
@@ -111,6 +114,8 @@ function connectBridge() {
           applyState({
             focusModeActive: Boolean(data.active),
             strict: Boolean(data.strict),
+            blockAll: Boolean(data.blockAll),
+            allowlist: Array.isArray(data.allowlist) ? data.allowlist : [],
             rules: Array.isArray(data.rules)
               ? data.rules.map((r) => ({ domain: r.domain ?? r.pattern, always: Boolean(r.always) }))
               : [],
@@ -160,6 +165,14 @@ async function applyState(patch) {
 function updateBadge(state) {
   const rules = activeRules(state);
   const on = state.focusModeActive;
+  if (on && state.blockAll) {
+    chrome.action.setBadgeText({ text: "ALL" });
+    chrome.action.setBadgeBackgroundColor({ color: "#ef4444" });
+    chrome.action.setTitle({
+      title: `Regain - studying: every site blocked except ${(state.allowlist || []).length} allowed`,
+    });
+    return;
+  }
   chrome.action.setBadgeText({ text: on ? (rules.length ? String(rules.length) : "ON") : rules.length ? String(rules.length) : "" });
   chrome.action.setBadgeBackgroundColor({ color: on ? "#2fbf8f" : "#7c5cff" });
   chrome.action.setTitle({
@@ -171,12 +184,40 @@ function updateBadge(state) {
   });
 }
 
+/**
+ * "Block everything except the allowlist" - one rule with the allowlist as
+ * excludedRequestDomains. Only applies while a session runs, and never touches
+ * the extension's own pages or the block screen itself.
+ */
+function blockAllRule(state) {
+  if (!state.focusModeActive || !state.blockAll) return null;
+  const allowlist = (state.allowlist || []).map((d) => normalizeDomain(d)).filter(Boolean);
+  return {
+    id: 10000,
+    priority: 10,
+    action: {
+      type: "redirect",
+      redirect: { extensionPath: "/blocked.html?mode=strict" },
+    },
+    condition: {
+      urlFilter: "*",
+      resourceTypes: ["main_frame"],
+      // the allowlist stays reachable, and so does the local dev preview
+      excludedRequestDomains: allowlist.length ? allowlist : ["localhost"],
+      excludedInitiatorDomains: allowlist.length ? allowlist : ["localhost"],
+    },
+  };
+}
+
 /** Rebuilds the dynamic rule set from the currently active rules. */
 async function syncDynamicRules(state) {
   const existing = await chrome.declarativeNetRequest.getDynamicRules();
   const removeRuleIds = existing.map((rule) => rule.id);
   const addRules = [];
   const rules = activeRules(state);
+
+  const strict = blockAllRule(state);
+  if (strict) addRules.push(strict);
 
   rules.slice(0, 900).forEach((rule, index) => {
     addRules.push({

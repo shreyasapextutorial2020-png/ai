@@ -132,6 +132,8 @@ interface StoreValue {
     addCustomApp: (process: string, label: string) => void;
     addCustomWeb: (domain: string, label: string) => boolean;
     setCategoryEnabled: (category: string, enabled: boolean, mode?: RuleMode) => void;
+    addAllowlistSite: (domain: string) => boolean;
+    removeAllowlistSite: (domain: string) => void;
     testBlock: (kind: "app" | "web", pattern: string) => void;
     removeCustomRule: (id: string) => void;
     toggleChannel: (id: string) => void;
@@ -678,8 +680,16 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       reelsBlocked,
       studyMode,
       channels: channels.filter((c) => c.enabled).map((c) => c.handle),
+      blockAll: state.settings.blockAllSites,
+      allowlist: state.settings.siteAllowlist,
     });
-  }, [reelsBlocked, studyMode, channels]);
+  }, [
+    reelsBlocked,
+    studyMode,
+    channels,
+    state.settings.blockAllSites,
+    state.settings.siteAllowlist,
+  ]);
 
   const focusGuardEnabled = state.settings.focusGuard;
 
@@ -894,6 +904,32 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       return { ...prev, webRules: [...prev.webRules, rule] };
     });
     return true;
+  }, []);
+
+  /** Domains that stay reachable when "block everything else" is on. */
+  const addAllowlistSite = useCallback((rawDomain: string) => {
+    const clean = normalizeDomain(rawDomain);
+    if (!clean) return false;
+    setState((prev) => ({
+      ...prev,
+      settings: {
+        ...prev.settings,
+        siteAllowlist: prev.settings.siteAllowlist.includes(clean)
+          ? prev.settings.siteAllowlist
+          : [...prev.settings.siteAllowlist, clean],
+      },
+    }));
+    return true;
+  }, []);
+
+  const removeAllowlistSite = useCallback((domain: string) => {
+    setState((prev) => ({
+      ...prev,
+      settings: {
+        ...prev.settings,
+        siteAllowlist: prev.settings.siteAllowlist.filter((d) => d !== domain),
+      },
+    }));
   }, []);
 
   /** Arms a whole category in one tap (used by the Blocking presets). */
@@ -1234,6 +1270,8 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       addCustomApp,
       addCustomWeb,
       setCategoryEnabled,
+      addAllowlistSite,
+      removeAllowlistSite,
       testBlock,
       removeCustomRule,
       toggleChannel,

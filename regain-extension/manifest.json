@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Regain Focus Companion",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "Companion for Regain PC: blocks distracting sites (including chess, game and streaming sites), hides Reels/Shorts and powers YouTube Study Mode while a focus session runs.",
   "permissions": [
     "storage",

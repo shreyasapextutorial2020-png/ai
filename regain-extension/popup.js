@@ -39,9 +39,13 @@ function render(state) {
   const blockedNow = state.focusModeActive ? rules.length : rules.filter((r) => r.always).length;
 
   $("detail").textContent = state.focusModeActive
-    ? `${blockedNow} site(s) blocked · Reels ${state.reelsBlocked ? "blocked" : "allowed"} · Study Mode ${
-        state.studyMode ? "on" : "off"
-      }`
+    ? state.blockAll
+      ? `Every site blocked except ${(state.allowlist || []).length} study sites · Reels ${
+          state.reelsBlocked ? "blocked" : "allowed"
+        }`
+      : `${blockedNow} site(s) blocked · Reels ${state.reelsBlocked ? "blocked" : "allowed"} · Study Mode ${
+          state.studyMode ? "on" : "off"
+        }`
     : `${blockedNow} site(s) always blocked · Start a session in Regain for the rest.`;
 
   const minutes = Math.floor((state.remainingSec || 0) / 60);

@@ -45,6 +45,9 @@ struct WebRules {
     reels_blocked: bool,
     study_mode: bool,
     channels: Vec<String>,
+    /// block every site except `allowlist` while a session is running
+    block_all: bool,
+    allowlist: Vec<String>,
 }
 
 impl WebRules {
@@ -228,6 +231,12 @@ fn broadcast_focus_state(state: &tauri::State<AppState>) {
         "reelsBlocked": state.web_rules.lock().map(|w| w.reels_blocked).unwrap_or(false),
         "studyMode": state.web_rules.lock().map(|w| w.study_mode).unwrap_or(false),
         "channels": state.web_rules.lock().map(|w| w.channels.clone()).unwrap_or_default(),
+        "blockAll": state.web_rules.lock().map(|w| w.block_all).unwrap_or(false),
+        "allowlist": state
+            .web_rules
+            .lock()
+            .map(|w| w.allowlist.clone())
+            .unwrap_or_default(),
     })
     .to_string();
     let _ = state.tx_channel.send(payload);
@@ -299,11 +308,25 @@ fn update_extension_settings(
     reels_blocked: bool,
     study_mode: bool,
     channels: Vec<String>,
+    #[serde(default)] block_all: bool,
+    #[serde(default)] allowlist: Vec<String>,
 ) {
     if let Ok(mut rules) = state.web_rules.lock() {
         rules.reels_blocked = reels_blocked;
         rules.study_mode = study_mode;
         rules.channels = channels;
+        rules.block_all = block_all;
+        rules.allowlist = allowlist
+            .into_iter()
+            .filter_map(|d| {
+                let clean = normalize_domain(&d);
+                if clean.is_empty() {
+                    None
+                } else {
+                    Some(clean)
+                }
+            })
+            .collect();
     }
     broadcast_focus_state(&state);
 }
@@ -455,6 +478,8 @@ pub fn run() {
                                             "rules": web.as_ref().map(|w| w.patterns().iter().map(|r| serde_json::json!({ "domain": r.pattern, "always": r.always })).collect::<Vec<_>>()).unwrap_or_default(),
                                             "reelsBlocked": web.as_ref().map(|w| w.reels_blocked).unwrap_or(false),
                                             "studyMode": web.as_ref().map(|w| w.study_mode).unwrap_or(false),
+                                            "blockAll": web.as_ref().map(|w| w.block_all).unwrap_or(false),
+                                            "allowlist": web.as_ref().map(|w| w.allowlist.clone()).unwrap_or_default(),
                                             "channels": web.as_ref().map(|w| w.channels.clone()).unwrap_or_default(),
                                         })
                                         .to_string()

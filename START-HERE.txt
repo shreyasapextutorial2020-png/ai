@@ -15,7 +15,7 @@ WHAT'S INSIDE
   icons/                  PNG/ICO/ICNS icon set — PNGs must stay 8-bit RGBA
   regain-extension/       Chrome/Edge MV3 blocker extension
   server/room-server.mjs  study-room relay (port 8790)
-  tests/                  7 suites, 295 checks
+  tests/                  7 suites, 321 checks
   scripts/make-icns.mjs   rebuilds icons/icon.icns from the PNGs
 
 
@@ -36,8 +36,8 @@ RUN THE REAL DESKTOP APP (Tauri)
                                (output: src-tauri/target/release/bundle)
 
 CHECK THAT EVERYTHING WORKS
-       npm test                engine 103, extension 62, icons 32, relay 11,
-                               ui-render 30, ui-resilience 8, ui-flow 49
+       npm test                engine 117, extension 70, icons 32, relay 11,
+                               ui-render 30, ui-resilience 8, ui-flow 54
        npm run build           production web build into dist/
 
 
@@ -61,6 +61,12 @@ BLOCKING CHEAT SHEET
     shows how many times it has actually fired.
   - Blocking presets arm a whole category in one tap (chess & board games,
     streaming, social media, chat, shopping, adult).
+  - MISSING A SITE? The catalogue cannot list the whole web. Turn on
+    "Block everything else" (Blocking -> Website blocker): from then on, while a
+    session runs, the extension blocks EVERY site except the allowlist you edit
+    right there. Add khanacademy.org, your school portal, whatever you need.
+  - The catalogue itself now covers 112 domains (chess/board/card games, web-game
+    arcades, streaming, social, chat, shopping, news, dating, gambling, adult).
   - Land on a blocked site and the tab can close itself immediately
     ("Close blocked tabs automatically", on by default — toggle it in the
     extension popup or right on the block page). Turn it off and the page shows
@@ -85,10 +91,14 @@ LIKE / DISLIKE
 FOCUS MUSIC
   30 soundscapes are generated live with the Web Audio API (no audio files):
   noise masking, rain/thunderstorm/stream/wind/ocean/fire/forest/crickets/
-  chimes, café/library/night train/typing/cabin hum, lo-fi pads/piano/jazz/
-  beats, chillwave, synthwave, ambient, singing bowls, tanpura, bansuri and
-  40 Hz / alpha / theta drones. The Music page also has a layer mixer: play a
-  primary sound and stack up to 3 more underneath it.
+  chimes, café/library/night train/typing/cabin hum, original compositions
+  (lo-fi pads/piano/jazz/beats, chillwave, synthwave, ambient, singing bowls,
+  tanpura, bansuri) and 40 Hz / alpha / theta drones. One sound plays at a time
+  and the music has no noise bed under it — the lo-fi tracks are chord
+  progressions, bass lines and drums written in the app.
+  WANT YOUR OWN ORIGINAL TRACKS? Music -> "Your music" -> Add audio files
+  (MP3/M4A/WAV/FLAC/OGG). They play as a playlist straight off your disk and are
+  never uploaded.
 
 STUDY ROOMS
   The room relay is a small local server. Start it with:
