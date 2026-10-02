@@ -80,11 +80,24 @@ jobs:
         continue-on-error: true
         run: cargo clippy --all-targets
 
+      # Errors are surfaced as GitHub annotations so a failure is diagnosable
+      # from the checks UI (and PR comments) instead of only in the raw log.
       - name: cargo check
-        run: cargo check --all-targets --verbose
+        shell: bash
+        run: |
+          set +e
+          cargo check --all-targets --message-format=short 2>&1 | tee cargo-check.log
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            grep -E "error(\[|:)" cargo-check.log | head -15 | while IFS= read -r line; do
+              echo "::error::$line"
+            done
+          fi
+          exit "$status"
 
       - name: cargo test
-        run: cargo test --verbose
+        shell: bash
+        run: cargo test --message-format=short
 
   extension:
     name: Extension packaging
