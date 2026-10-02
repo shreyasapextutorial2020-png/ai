@@ -429,10 +429,15 @@ pub fn run() {
                         while let Ok((stream, _)) = listener.accept().await {
                             let mut rx_sub = tx_server.subscribe();
                             let client = bridge_handle.clone();
-                            if let Ok(mut count) = client.state::<AppState>().bridge_clients.lock() {
-                                *count += 1;
-                                let _ = client.emit("bridge-clients", *count);
-                            }
+                            let bridge_clients = client.state::<AppState>().bridge_clients.clone();
+                            let connected = match bridge_clients.lock() {
+                                Ok(mut count) => {
+                                    *count += 1;
+                                    *count
+                                }
+                                Err(_) => 0,
+                            };
+                            let _ = client.emit("bridge-clients", connected);
 
                             tauri::async_runtime::spawn(async move {
                                 if let Ok(ws_stream) = accept_async(stream).await {
@@ -486,11 +491,15 @@ pub fn run() {
                                         }
                                     }
                                     reader.abort();
-                                    let state = client.state::<AppState>();
-                                    if let Ok(mut count) = state.bridge_clients.lock() {
-                                        *count = count.saturating_sub(1);
-                                        let _ = client.emit("bridge-clients", *count);
-                                    }
+                                    let bridge_clients = client.state::<AppState>().bridge_clients.clone();
+                                    let remaining = match bridge_clients.lock() {
+                                        Ok(mut count) => {
+                                            *count = count.saturating_sub(1);
+                                            *count
+                                        }
+                                        Err(_) => 0,
+                                    };
+                                    let _ = client.emit("bridge-clients", remaining);
                                 }
                             });
                         }
