@@ -223,8 +223,10 @@ Verified in this workspace:
 Not verified here (no Rust toolchain and no Windows in this environment):
 
 * Local `cargo build` — no Rust toolchain in this environment. CI covers it:
-  `cargo check`/`cargo test` now pass on Windows, Linux and macOS, and the
-  Windows job produces `.msi`/`.exe` installers via `tauri build`.
+  Windows `cargo check`/`cargo test` pass and the desktop job produces
+  `.msi`/`.exe` installers via `tauri build`. The Linux and macOS jobs drive
+  `tauri::generate_context!` harder and exposed an RGB icon bug; the icons are
+  now RGBA and the `icons` suite guards it, awaiting the next CI run.
 * Native foreground‑window detection and minimise‑on‑sight blocking.
 * The unpacked Chrome extension inside a real browser (its manifest, permissions
   and MV3 compliance are validated statically in CI instead).
